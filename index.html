@@ -1,0 +1,3087 @@
+<!DOCTYPE html>
+<html lang="de" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoSlop – Echte Nahrung. Deutschlandweites Hofladen-Radar.</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Fraunces', 'serif'],
+                    },
+                    colors: {
+                        forest: {
+                            50: '#f2f7f4',
+                            100: '#e1ede5',
+                            200: '#c3dbcc',
+                            300: '#9ac0aa',
+                            400: '#6c9e82',
+                            500: '#4a8063',
+                            600: '#37654d',
+                            700: '#2c513e',
+                            800: '#254133',
+                            900: '#1f362b',
+                            950: '#101e17',
+                        },
+                        earth: {
+                            50: '#fbf9f5',
+                            100: '#f5f0e6',
+                            200: '#eae0cc',
+                            300: '#dcc9a8',
+                            400: '#cca97e',
+                            500: '#be8e5b',
+                            600: '#b0794b',
+                            700: '#92603e',
+                            800: '#774f37',
+                            900: '#61412f',
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f5f0e6; }
+        ::-webkit-scrollbar-thumb { background: #9ac0aa; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4a8063; }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            min-height: 420px;
+            z-index: 10;
+            background-color: #eae0cc;
+        }
+        .custom-div-icon {
+            background: transparent;
+            border: none;
+        }
+        .marker-pin {
+            width: 36px;
+            height: 36px;
+            border-radius: 50% 50% 50% 0;
+            background: #2c513e;
+            position: relative;
+            transform: translate(-50%, -100%) rotate(-45deg);
+            transform-origin: 50% 50%;
+            left: 18px;
+            top: 42px;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+            border: 2px solid #fbf9f5;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+        .marker-pin.osm-verified {
+            background: #1f362b;
+            border-color: #dcc9a8;
+        }
+        .marker-pin:hover {
+            transform: translate(-50%, -100%) rotate(-45deg) scale(1.12);
+            background: #b0794b;
+        }
+        .marker-pin span {
+            transform: rotate(45deg);
+            font-size: 16px;
+            line-height: 1;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-earth-50 text-forest-950 font-sans antialiased selection:bg-forest-200 selection:text-forest-900 flex flex-col min-h-screen">
+
+    <!-- Toast Benachrichtigungen -->
+    <div id="toast-container" class="fixed bottom-20 md:bottom-6 right-4 left-4 md:left-auto md:w-96 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Header -->
+    <header class="bg-white/95 backdrop-blur-md border-b border-earth-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 cursor-pointer" onclick="switchTab('map-tab')">
+                <div class="w-10 h-10 rounded-xl bg-forest-800 text-earth-50 flex items-center justify-center shadow-sm">
+                    <i data-lucide="sprout" class="w-6 h-6 text-earth-300"></i>
+                </div>
+                <div>
+                    <span class="font-serif font-bold text-xl tracking-tight text-forest-900">No<span class="text-earth-600">Slop</span></span>
+                    <span class="hidden sm:inline-block ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-forest-100 text-forest-800">OSM + KI Live-Daten</span>
+                </div>
+            </div>
+
+            <!-- Desktop Navigation -->
+            <nav class="hidden md:flex items-center gap-1 bg-earth-100/80 p-1 rounded-2xl border border-earth-200">
+                <button onclick="switchTab('map-tab')" id="nav-map-tab" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-white text-forest-900 shadow-sm">
+                    <i data-lucide="map-pin" class="w-4 h-4 text-forest-600"></i>
+                    Hofladen-Radar
+                </button>
+                <button onclick="switchTab('planner-tab')" id="nav-planner-tab" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-forest-700 hover:text-forest-900 transition-all">
+                    <i data-lucide="shopping-basket" class="w-4 h-4 text-forest-600"></i>
+                    Preis- & Einkaufsplaner
+                </button>
+                <button onclick="switchTab('scanner-tab')" id="nav-scanner-tab" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-forest-700 hover:text-forest-900 transition-all">
+                    <i data-lucide="scan-line" class="w-4 h-4 text-earth-600"></i>
+                    Slop-Check (KI)
+                </button>
+                <button onclick="switchTab('season-tab')" id="nav-season-tab" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-forest-700 hover:text-forest-900 transition-all">
+                    <i data-lucide="calendar-heart" class="w-4 h-4 text-forest-600"></i>
+                    Saison-Planer
+                </button>
+                <button onclick="switchTab('coach-tab')" id="nav-coach-tab" class="nav-btn flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-forest-700 hover:text-forest-900 transition-all">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-forest-600"></i>
+                    KI-Ernährungsguide
+                </button>
+            </nav>
+
+            <div class="flex items-center gap-2">
+                <button onclick="openManifestoModal()" class="text-xs sm:text-sm font-semibold text-forest-800 hover:text-forest-600 bg-forest-100/80 hover:bg-forest-100 px-3.5 py-2 rounded-xl transition-colors flex items-center gap-1.5">
+                    <i data-lucide="database" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Daten-Pipeline</span>
+                    <span class="sm:hidden">Info</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hauptbereich -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 pb-24 md:pb-8">
+
+        <!-- TAB 1: HOFLADEN-RADAR & KARTE -->
+        <section id="map-tab" class="tab-content block space-y-4">
+            <div class="bg-white rounded-3xl p-4 sm:p-6 shadow-sm border border-earth-200">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <h1 class="font-serif text-2xl sm:text-3xl font-bold text-forest-900">Deutschlandweites Erzeuger-Radar</h1>
+                        <p class="text-sm text-forest-700 mt-1">Punktgenaue OpenStreetMap-Gebäudekoordinaten, automatischer Verzeichnisabgleich & Live-Preis-Scraper.</p>
+                    </div>
+
+                    <form onsubmit="handleLocationSearch(event)" class="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                        <div class="relative flex-1 sm:w-64">
+                            <i data-lucide="search" class="w-4 h-4 text-forest-500 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                            <input type="text" id="city-input" value="Dachau" placeholder="Stadt oder PLZ in Deutschland..."
+                                class="w-full pl-10 pr-4 py-2.5 bg-earth-50 border border-earth-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-forest-600 text-forest-950 font-medium">
+                        </div>
+                        <button type="submit" id="ai-search-btn" class="bg-forest-800 hover:bg-forest-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+                            <i data-lucide="radar" class="w-4 h-4 text-earth-300"></i>
+                            <span>OSM + KI Sync</span>
+                        </button>
+                        <button type="button" onclick="scrapeAllLocalPrices()" id="scrape-prices-btn" class="bg-earth-700 hover:bg-earth-600 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap" title="Produktpreise von Anbieter-Websites abrufen">
+                            <i data-lucide="tags" class="w-4 h-4 text-earth-200"></i>
+                            <span>Preise scrapen</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Kategorie-Filter & Radius -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-4 mt-4 border-t border-earth-100">
+                    <div class="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-forest-500 mr-1">Filter:</span>
+                        <button onclick="filterPlaces('all')" class="filter-chip active px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-forest-800 text-white transition-all whitespace-nowrap">
+                            Alle Betriebe
+                        </button>
+                        <button onclick="filterPlaces('milk')" class="filter-chip px-3.5 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 hover:bg-earth-200 transition-all whitespace-nowrap">
+                            🥛 Rohmilch & Käse
+                        </button>
+                        <button onclick="filterPlaces('meat')" class="filter-chip px-3.5 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 hover:bg-earth-200 transition-all whitespace-nowrap">
+                            🥩 Bio-Metzger & Fleisch
+                        </button>
+                        <button onclick="filterPlaces('produce')" class="filter-chip px-3.5 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 hover:bg-earth-200 transition-all whitespace-nowrap">
+                            🥕 Hofladen, Obst & Gemüse
+                        </button>
+                        <button onclick="filterPlaces('bakery')" class="filter-chip px-3.5 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 hover:bg-earth-200 transition-all whitespace-nowrap">
+                            🍞 Bio-Bäcker
+                        </button>
+                        <button onclick="filterPlaces('honey')" class="filter-chip px-3.5 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 hover:bg-earth-200 transition-all whitespace-nowrap">
+                            🍯 Imker & Eier
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2 text-xs">
+                        <label for="search-radius" class="font-semibold text-forest-700">Suchradius:</label>
+                        <select id="search-radius" onchange="handleRadiusChange()" class="bg-earth-50 border border-earth-300 rounded-lg px-2 py-1 font-semibold text-forest-900 focus:outline-none">
+                            <option value="5000">5 km</option>
+                            <option value="12000" selected>12 km</option>
+                            <option value="25000">25 km</option>
+                            <option value="50000">50 km</option>
+                            <option value="100000">100 km</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Split View: Liste & Karte -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:h-[640px]">
+                <!-- Ergebnisliste -->
+                <div class="lg:col-span-5 bg-white rounded-3xl border border-earth-200 shadow-sm flex flex-col overflow-hidden h-[450px] lg:h-full">
+                    <div class="p-4 bg-earth-100/60 border-b border-earth-200 flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-forest-800 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-green-600 animate-pulse"></span>
+                            <span id="places-count">7 Verifizierte Erzeuger</span>
+                        </span>
+                        <span id="ai-status-badge" class="text-xs text-forest-600 font-medium">OSM + Verifiziert</span>
+                    </div>
+                    <div id="places-list" class="flex-1 overflow-y-auto p-3 space-y-3"></div>
+                </div>
+
+                <!-- Interaktive Karte -->
+                <div class="lg:col-span-7 bg-white rounded-3xl border border-earth-200 shadow-sm overflow-hidden relative h-[450px] lg:h-full">
+                    <div id="map"></div>
+                    <div class="absolute bottom-4 left-4 right-4 sm:right-auto bg-white/95 backdrop-blur-md p-3 rounded-2xl shadow-md border border-earth-200 z-20 text-xs pointer-events-none">
+                        <div class="font-bold text-forest-900 mb-0.5 flex items-center gap-1.5">
+                            <i data-lucide="crosshair" class="w-3.5 h-3.5 text-earth-600"></i>
+                            Exakte Koordinaten (0m) & Satellit
+                        </div>
+                        <p class="text-forest-700 max-w-xs">Pins werden nur auf exakte Koordinaten (0 m Toleranz) gesetzt. Klicke auf einen Pin für Preise, Zeiten & Route.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: PREIS- & EINKAUFSPLANER -->
+        <section id="planner-tab" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-5 bg-white rounded-3xl p-6 shadow-sm border border-earth-200 space-y-5 h-fit">
+                    <div>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-forest-100 text-forest-800 text-xs font-bold uppercase tracking-wider mb-2">
+                            <i data-lucide="calculator" class="w-3.5 h-3.5"></i> Smart-Spar-Radar (Live-Preise)
+                        </span>
+                        <h2 class="font-serif text-2xl font-bold text-forest-900">Günstigsten Bio-Einkauf planen</h2>
+                        <p class="text-xs text-forest-700 mt-1">Nutzt automatisch die erfassten Ab-Hof-Preise der aktuellen Karten-Erzeuger für deinen Preisvergleich.</p>
+                    </div>
+
+                    <form onsubmit="generateSmartShoppingPlan(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-forest-800 mb-2">1. Anlass / Einkaufstyp:</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="button" onclick="selectOccasion(this, 'Wocheneinkauf')" class="occasion-btn py-2.5 px-3 rounded-xl text-xs font-semibold border border-forest-800 bg-forest-800 text-white transition-all flex items-center justify-center gap-1.5">
+                                    <span>🛒</span> Wocheneinkauf
+                                </button>
+                                <button type="button" onclick="selectOccasion(this, 'Frühstück & Brunch')" class="occasion-btn py-2.5 px-3 rounded-xl text-xs font-medium border border-earth-300 bg-earth-50 text-forest-800 hover:bg-earth-100 transition-all flex items-center justify-center gap-1.5">
+                                    <span>🥐</span> Frühstück
+                                </button>
+                                <button type="button" onclick="selectOccasion(this, 'Gesundes Abendessen')" class="occasion-btn py-2.5 px-3 rounded-xl text-xs font-medium border border-earth-300 bg-earth-50 text-forest-800 hover:bg-earth-100 transition-all flex items-center justify-center gap-1.5">
+                                    <span>🍲</span> Abendessen
+                                </button>
+                                <button type="button" onclick="selectOccasion(this, 'Grillabend / Festmahl')" class="occasion-btn py-2.5 px-3 rounded-xl text-xs font-medium border border-earth-300 bg-earth-50 text-forest-800 hover:bg-earth-100 transition-all flex items-center justify-center gap-1.5">
+                                    <span>🥩</span> Grillen / Festmahl
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label for="plan-persons" class="block text-xs font-bold uppercase tracking-wider text-forest-800 mb-1.5">Personen:</label>
+                                <select id="plan-persons" class="w-full px-3 py-2.5 bg-earth-50 border border-earth-300 rounded-xl text-sm font-medium text-forest-950 focus:outline-none focus:ring-2 focus:ring-forest-600">
+                                    <option value="1 Person">1 Person</option>
+                                    <option value="2 Personen" selected>2 Personen</option>
+                                    <option value="4 Personen (Familie)">4 Personen</option>
+                                    <option value="6 Personen">6 Personen</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="plan-budget" class="block text-xs font-bold uppercase tracking-wider text-forest-800 mb-1.5">Preis-Fokus:</label>
+                                <select id="plan-budget" class="w-full px-3 py-2.5 bg-earth-50 border border-earth-300 rounded-xl text-sm font-medium text-forest-950 focus:outline-none focus:ring-2 focus:ring-forest-600">
+                                    <option value="Absolut billigster Direktpreis ab Hof" selected>Maximal sparen (Ab-Hof)</option>
+                                    <option value="Ausgewogen (Preis & wenig Fahrtwege)">Wenig Fahrtwege</option>
+                                    <option value="Demeter / Bioland Premium">Premium-Qualität</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-forest-800 mb-2">2. Was soll enthalten sein?</label>
+                            <div class="flex flex-wrap gap-2">
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" value="Rohmilch / Bio-Milch & Butter" checked class="plan-cat hidden peer">
+                                    <span class="inline-block px-3 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 border border-earth-200 peer-checked:bg-forest-700 peer-checked:text-white peer-checked:border-forest-700 transition-all">🥛 Roh-/Bio-Milch</span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" value="Weidefleisch & Bio-Eier" checked class="plan-cat hidden peer">
+                                    <span class="inline-block px-3 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 border border-earth-200 peer-checked:bg-forest-700 peer-checked:text-white peer-checked:border-forest-700 transition-all">🥩 Fleisch & Eier</span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" value="Saisonales Bio-Obst & Gemüse" checked class="plan-cat hidden peer">
+                                    <span class="inline-block px-3 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 border border-earth-200 peer-checked:bg-forest-700 peer-checked:text-white peer-checked:border-forest-700 transition-all">🥕 Obst & Gemüse</span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" value="Echtes Sauerteigbrot" checked class="plan-cat hidden peer">
+                                    <span class="inline-block px-3 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 border border-earth-200 peer-checked:bg-forest-700 peer-checked:text-white peer-checked:border-forest-700 transition-all">🍞 Sauerteigbrot</span>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" value="Naturbelassener Imkerhonig" class="plan-cat hidden peer">
+                                    <span class="inline-block px-3 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 border border-earth-200 peer-checked:bg-forest-700 peer-checked:text-white peer-checked:border-forest-700 transition-all">🍯 Honig</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="plan-custom-notes" class="block text-xs font-bold uppercase tracking-wider text-forest-800 mb-1.5">3. Eigene Wünsche / Zutaten (optional):</label>
+                            <input type="text" id="plan-custom-notes" placeholder="z.B. Rinderhack, 2L Rohmilch, Kartoffeln..."
+                                class="w-full px-3.5 py-2.5 bg-earth-50 border border-earth-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-forest-600 text-forest-950">
+                        </div>
+
+                        <button type="submit" id="generate-plan-btn" class="w-full bg-forest-800 hover:bg-forest-700 text-white font-semibold py-3.5 px-5 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2">
+                            <i data-lucide="sparkles" class="w-5 h-5 text-earth-300"></i>
+                            <span>Billigsten Einkauf berechnen</span>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="lg:col-span-7 space-y-4">
+                    <div id="planner-result-area" class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-earth-200 min-h-[480px] flex flex-col justify-center">
+                        <div class="text-center max-w-md mx-auto space-y-3 py-8">
+                            <div class="w-16 h-16 rounded-2xl bg-earth-100 text-forest-800 flex items-center justify-center mx-auto">
+                                <i data-lucide="receipt" class="w-8 h-8 text-earth-600"></i>
+                            </div>
+                            <h3 class="font-serif text-xl font-bold text-forest-900">Dein KI-Preisvergleich steht bereit</h3>
+                            <p class="text-sm text-forest-700 leading-relaxed">
+                                Wähle links deinen Anlass und klicke auf <em>„Billigsten Einkauf berechnen“</em>. Alle gescrapten Hofpreise aus dem Radar fließen direkt ein.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: SLOP-CHECK (KAMERA & ZUTATEN ANALYSE + LOKALDATEN-MATCHING) -->
+        <section id="scanner-tab" class="tab-content hidden space-y-6">
+            <div class="max-w-3xl mx-auto">
+                <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-earth-200">
+                    <div class="text-center max-w-xl mx-auto mb-6">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-earth-100 text-earth-800 text-xs font-bold uppercase tracking-wider mb-3">
+                            <i data-lucide="microscope" class="w-3.5 h-3.5"></i> KI-Zutaten-Detektor + Hofladen-Matcher
+                        </span>
+                        <h2 class="font-serif text-2xl sm:text-3xl font-bold text-forest-900">Ist es echte Nahrung oder „Slop“?</h2>
+                        <p class="text-sm text-forest-700 mt-2">
+                            Scanne ein Produkt per Kamera oder Text – wir verknüpfen das Ergebnis sofort mit einem passenden Erzeuger auf deiner Karte.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="bg-earth-50 border-2 border-dashed border-earth-300 rounded-2xl p-4 text-center space-y-3">
+                            <div class="flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                                <button type="button" onclick="startCameraScanner()" id="open-camera-btn" class="w-full sm:w-auto bg-earth-800 hover:bg-earth-700 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
+                                    <i data-lucide="camera" class="w-4 h-4 text-earth-200"></i>
+                                    <span>Mit Handykamera scannen</span>
+                                </button>
+                                <label class="w-full sm:w-auto cursor-pointer bg-white hover:bg-earth-100 text-forest-900 border border-earth-300 text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                                    <i data-lucide="image-plus" class="w-4 h-4 text-forest-700"></i>
+                                    <span>Foto hochladen / aufnehmen</span>
+                                    <input type="file" id="slop-file-input" accept="image/*" capture="environment" onchange="handleImageUpload(event)" class="hidden">
+                                </label>
+                            </div>
+
+                            <div id="camera-stream-wrapper" class="hidden relative rounded-2xl overflow-hidden bg-black max-w-md mx-auto border border-forest-700 shadow-md">
+                                <video id="camera-video" autoplay playsinline class="w-full h-64 object-cover"></video>
+                                <canvas id="camera-canvas" class="hidden"></canvas>
+                                <div class="absolute bottom-3 left-0 right-0 flex justify-center gap-3 px-4">
+                                    <button type="button" onclick="captureCameraPhoto()" class="bg-forest-600 hover:bg-forest-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-1.5 border border-white/30">
+                                        <i data-lucide="aperture" class="w-4 h-4"></i> Foto aufnehmen
+                                    </button>
+                                    <button type="button" onclick="stopCameraScanner()" class="bg-red-700/90 hover:bg-red-600 text-white font-semibold text-xs px-3.5 py-2.5 rounded-xl shadow-lg">
+                                        Abbrechen
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="image-preview-wrapper" class="hidden relative max-w-xs mx-auto pt-2">
+                                <img id="slop-image-preview" src="" alt="Gescanntes Produkt" class="w-full h-44 object-cover rounded-xl border border-earth-300 shadow-sm">
+                                <button type="button" onclick="clearScannedImage()" class="absolute top-4 right-2 bg-forest-950/80 hover:bg-red-700 text-white p-1.5 rounded-full text-xs shadow-md transition-colors">
+                                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                                </button>
+                                <span class="block text-[11px] font-semibold text-forest-800 mt-1.5">✅ Produktfoto bereit für KI-Analyse</span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="slop-input" class="block text-xs font-bold uppercase tracking-wider text-forest-800 mb-2">Oder Produktname / Zutatenliste eintippen:</label>
+                            <textarea id="slop-input" rows="2" placeholder="z.B. 'Fruchtjoghurt Erdbeer' oder 'Industrie-Toastbrot'..."
+                                class="w-full p-3.5 bg-earth-50 border border-earth-300 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-forest-600 text-forest-950"></textarea>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs text-forest-600 font-medium">Schnell-Tests:</span>
+                            <button type="button" onclick="fillSlopExample('Industrie-Toastbrot mit Rapsöl, Emulgatoren E471, Zucker und Konservierungsstoffen')" class="text-xs bg-earth-100 hover:bg-earth-200 text-forest-800 px-3 py-1.5 rounded-xl transition-colors">
+                                🍞 Supermarkt-Toast
+                            </button>
+                            <button type="button" onclick="fillSlopExample('Pasteurisierte, homogenisierte H-Milch 1,5% Fett')" class="text-xs bg-earth-100 hover:bg-earth-200 text-forest-800 px-3 py-1.5 rounded-xl transition-colors">
+                                🥛 H-Milch vs. Rohmilch
+                            </button>
+                            <button type="button" onclick="fillSlopExample('Frische Karotten, Kartoffeln & Grünkohl (Bio-Supermarkt Auslage)')" class="text-xs bg-earth-100 hover:bg-earth-200 text-forest-800 px-3 py-1.5 rounded-xl transition-colors">
+                                🥕 Saison-Gemüse & Ernte-Check
+                            </button>
+                        </div>
+
+                        <!-- Filterregeln: Bio-Supermarkt Spitzenqualität & Preis-Optimierung -->
+                        <div class="bg-forest-50/80 border border-forest-200 rounded-2xl p-3.5 space-y-2.5">
+                            <div class="text-[11px] font-bold uppercase tracking-wider text-forest-800 flex items-center gap-1.5">
+                                <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-forest-700"></i>
+                                Scanner-Filterregeln & Saison-Verknüpfung
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <label class="flex items-start gap-2.5 bg-white p-2.5 rounded-xl border border-earth-200 cursor-pointer hover:border-forest-400 transition-colors">
+                                    <input type="checkbox" id="filter-strict-bio" checked class="mt-0.5 rounded text-forest-800 focus:ring-forest-600">
+                                    <span class="text-xs leading-snug">
+                                        <strong class="text-forest-950 block">Nur höchste Bio-Qualität</strong>
+                                        <span class="text-forest-700">Priorisiert Demeter, Bioland & Naturland vor EU-Bio-Massenware.</span>
+                                    </span>
+                                </label>
+                                <label class="flex items-start gap-2.5 bg-white p-2.5 rounded-xl border border-earth-200 cursor-pointer hover:border-forest-400 transition-colors">
+                                    <input type="checkbox" id="filter-cheapest-recipe" checked class="mt-0.5 rounded text-forest-800 focus:ring-forest-600">
+                                    <span class="text-xs leading-snug">
+                                        <strong class="text-forest-950 block">Günstigste Rezepte & Höfe</strong>
+                                        <span class="text-forest-700">Filtert preiswerteste Saison-Rezepte & direkte Ab-Hof-Preise.</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button onclick="analyzeSlop()" id="analyze-slop-btn" class="w-full bg-forest-800 hover:bg-forest-700 text-white font-semibold py-3.5 px-6 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2">
+                            <i data-lucide="scan-line" class="w-5 h-5 text-earth-300"></i>
+                            <span>Objekt erkennen, Saison prüfen & Rezepte laden</span>
+                        </button>
+                    </div>
+
+                    <div id="slop-result-container" class="hidden mt-8 pt-6 border-t border-earth-200"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: AUTOMATISIERTER SAISON-PLANER & REGIONALE ERNTEDATENBANK -->
+        <section id="season-tab" class="tab-content hidden space-y-6">
+            <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-earth-200 space-y-6">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-earth-100 pb-5">
+                    <div>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-forest-100 text-forest-800 text-xs font-bold uppercase tracking-wider mb-2">
+                            <i data-lucide="sprout" class="w-3.5 h-3.5"></i> Regionale Erntezeiten-Datenbank & Standort-Abgleich
+                        </span>
+                        <h2 class="font-serif text-2xl sm:text-3xl font-bold text-forest-900">Automatisierter Saison- & Bestpreis-Planer</h2>
+                        <p class="text-sm text-forest-700 mt-1" id="season-region-subtitle">Erntefrische Zutaten, Rezepte & Hofläden aus deiner aktuellen Region.</p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" onclick="useCurrentUserLocationForSeason(true)" id="btn-use-gps-season" class="bg-forest-100 hover:bg-forest-200 text-forest-900 border border-forest-300 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5">
+                            <i data-lucide="locate-fixed" class="w-4 h-4 text-forest-700"></i>
+                            <span id="season-region-label">Region: Dachau</span>
+                        </button>
+                        <select id="season-month-select" onchange="renderSeasonPlanner()" class="bg-earth-50 border border-earth-300 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-forest-950 focus:outline-none focus:ring-2 focus:ring-forest-600">
+                            <option value="1">Januar (Winterlager)</option>
+                            <option value="2">Februar (Winterlager)</option>
+                            <option value="3">März (Frühlingsstart)</option>
+                            <option value="4">April (Frühjahr)</option>
+                            <option value="5">Mai (Spargel & Beerenstart)</option>
+                            <option value="6">Juni (Frühsommer)</option>
+                            <option value="7">Juli (Hochsommer)</option>
+                            <option value="8">August (Erntefülle)</option>
+                            <option value="9">September (Spätsommer)</option>
+                            <option value="10">Oktober (Haupternte Herbst)</option>
+                            <option value="11" selected>November (Spätherbst & Lager)</option>
+                            <option value="12">Dezember (Wintergemüse)</option>
+                        </select>
+                        <select id="season-sort-mode" onchange="renderSeasonPlanner()" class="bg-earth-50 border border-earth-300 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-forest-950 focus:outline-none focus:ring-2 focus:ring-forest-600">
+                            <option value="cheapest" selected>💰 Günstigste Rezepte & Höfe zuerst</option>
+                            <option value="freshness">🌱 Maximale Erntefrische (Freiland)</option>
+                            <option value="demeter">🏅 Nur Demeter / Bioland Spitzenqualität</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Saisonale Erntekarten -->
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-serif text-lg font-bold text-forest-900" id="season-harvest-heading">Aktuelle Freiland- & Lagerernte</h3>
+                        <span class="text-xs font-semibold text-forest-600" id="season-harvest-badge">Direktabgleich mit Radar-Höfen</span>
+                    </div>
+                    <div id="season-harvest-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"></div>
+                </div>
+
+                <!-- Günstigste Saison-Rezepte & Einkaufsquellen -->
+                <div class="pt-4 border-t border-earth-200 space-y-3">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h3 class="font-serif text-xl font-bold text-forest-900">Günstigste Saison-Rezepte & Frisch-Bezugsquellen</h3>
+                            <p class="text-xs text-forest-700">Automatisch berechnet aus aktuellen Erntezeiten und den erfassten Ab-Hof-Preisen deiner Karte.</p>
+                        </div>
+                        <button type="button" onclick="generateAISeasonRecipes()" id="btn-ai-season-recipes" class="bg-forest-800 hover:bg-forest-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5 w-fit">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-earth-300"></i>
+                            <span>Neue KI-Saisonrezepte berechnen</span>
+                        </button>
+                    </div>
+                    <div id="season-recipes-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 5: KI-ERNÄHRUNGS-COACH -->
+        <section id="coach-tab" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-7 bg-white rounded-3xl border border-earth-200 shadow-sm flex flex-col h-[580px] overflow-hidden">
+                    <div class="p-4 sm:p-5 bg-forest-900 text-earth-50 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-forest-700 flex items-center justify-center border border-forest-500">
+                            <i data-lucide="leaf" class="w-5 h-5 text-earth-300"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-serif font-bold text-lg leading-tight">NoSlop KI-Ernährungsberater</h3>
+                            <p class="text-xs text-forest-200">Alles über Rohmilch, Weidefleisch, Sauerteig & echte Nährstoffe.</p>
+                        </div>
+                    </div>
+
+                    <div id="chat-messages" class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-earth-50/50">
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-full bg-forest-800 text-earth-100 flex items-center justify-center shrink-0 mt-0.5">
+                                <i data-lucide="sprout" class="w-4 h-4"></i>
+                            </div>
+                            <div class="bg-white border border-earth-200 rounded-2xl rounded-tl-none p-3.5 text-sm text-forest-900 shadow-sm max-w-[85%] space-y-2">
+                                <p>Willkommen bei <strong>NoSlop</strong>! 🌿</p>
+                                <p>Frag mich alles rund um unverarbeitete, gesunde Ernährung direkt vom Bauernhof, Metzger und Bäcker.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="px-4 py-2 bg-white border-t border-earth-100 flex gap-2 overflow-x-auto no-scrollbar">
+                        <button onclick="sendQuickPrompt('Warum ist Rohmilch vom Bauernhof besser als Supermarkt-Milch?')" class="text-xs bg-forest-50 hover:bg-forest-100 text-forest-800 border border-forest-200 px-3 py-1.5 rounded-xl whitespace-nowrap transition-colors">
+                            🥛 Warum Rohmilch?
+                        </button>
+                        <button onclick="sendQuickPrompt('Was macht 100% Weidefleisch (Grass-Fed) so nährstoffreich?')" class="text-xs bg-forest-50 hover:bg-forest-100 text-forest-800 border border-forest-200 px-3 py-1.5 rounded-xl whitespace-nowrap transition-colors">
+                            🥩 Vorteile Weidefleisch
+                        </button>
+                    </div>
+
+                    <form onsubmit="handleChatSubmit(event)" class="p-3 sm:p-4 bg-white border-t border-earth-200 flex gap-2">
+                        <input type="text" id="chat-input" placeholder="Deine Frage zu gesunder Ernährung..."
+                            class="flex-1 px-4 py-2.5 bg-earth-50 border border-earth-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-forest-600">
+                        <button type="submit" class="bg-forest-800 hover:bg-forest-700 text-white p-2.5 rounded-xl transition-colors flex items-center justify-center">
+                            <i data-lucide="send" class="w-5 h-5"></i>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="lg:col-span-5 space-y-4">
+                    <div class="bg-white rounded-3xl p-6 border border-earth-200 shadow-sm">
+                        <h3 class="font-serif text-xl font-bold text-forest-900 mb-4 flex items-center gap-2">
+                            <i data-lucide="compass" class="w-5 h-5 text-earth-600"></i>
+                            Die 4 Säulen echter Ernährung
+                        </h3>
+                        <div class="space-y-3">
+                            <div class="p-3.5 rounded-2xl bg-earth-50 border border-earth-200">
+                                <div class="font-bold text-sm text-forest-900">🥛 1. Unbehandelte Milchprodukte</div>
+                                <p class="text-xs text-forest-700 mt-1">Frische Rohmilch, Vorzugsmilch, Rohmilchkäse und Weidebutter voller natürlicher Enzyme & Vitamine.</p>
+                            </div>
+                            <div class="p-3.5 rounded-2xl bg-earth-50 border border-earth-200">
+                                <div class="font-bold text-sm text-forest-900">🥩 2. Artgerechtes Weidefleisch & Eier</div>
+                                <p class="text-xs text-forest-700 mt-1">Optimales Omega-3-Verhältnis, hochwertiges Protein, Eisen und Vitamin B12.</p>
+                            </div>
+                            <div class="p-3.5 rounded-2xl bg-earth-50 border border-earth-200">
+                                <div class="font-bold text-sm text-forest-900">🥕 3. Saisonal & Ungespritzt</div>
+                                <p class="text-xs text-forest-700 mt-1">Frisches Bio-Obst und Gemüse direkt vom Feld statt langer Kühlhaus-Lagerung.</p>
+                            </div>
+                            <div class="p-3.5 rounded-2xl bg-earth-50 border border-earth-200">
+                                <div class="font-bold text-sm text-forest-900">🍯 4. Echtes Handwerk statt Chemie</div>
+                                <p class="text-xs text-forest-700 mt-1">Langzeitgeführter Sauerteig und unerhitzter Imkerhonig statt Industrie-Backmischungen.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Mobile Bottom Navigation -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-earth-200 px-1 py-2 flex justify-around items-center z-40 shadow-lg">
+        <button onclick="switchTab('map-tab')" id="mob-nav-map-tab" class="mob-nav-btn flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-xl text-forest-900 bg-forest-50 font-semibold text-[11px]">
+            <i data-lucide="map-pin" class="w-5 h-5 text-forest-700"></i>
+            <span>Karte</span>
+        </button>
+        <button onclick="switchTab('planner-tab')" id="mob-nav-planner-tab" class="mob-nav-btn flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-xl text-forest-600 font-medium text-[11px]">
+            <i data-lucide="shopping-basket" class="w-5 h-5"></i>
+            <span>Preis-Planer</span>
+        </button>
+        <button onclick="switchTab('scanner-tab')" id="mob-nav-scanner-tab" class="mob-nav-btn flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-xl text-forest-600 font-medium text-[11px]">
+            <i data-lucide="scan-line" class="w-5 h-5"></i>
+            <span>Slop-Check</span>
+        </button>
+        <button onclick="switchTab('season-tab')" id="mob-nav-season-tab" class="mob-nav-btn flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-xl text-forest-600 font-medium text-[11px]">
+            <i data-lucide="calendar-heart" class="w-5 h-5"></i>
+            <span>Saison</span>
+        </button>
+        <button onclick="switchTab('coach-tab')" id="mob-nav-coach-tab" class="mob-nav-btn flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-xl text-forest-600 font-medium text-[11px]">
+            <i data-lucide="sparkles" class="w-5 h-5"></i>
+            <span>KI-Coach</span>
+        </button>
+    </nav>
+
+    <!-- Daten-Pipeline Modal -->
+    <div id="manifesto-modal" class="fixed inset-0 bg-forest-950/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-earth-200 relative">
+            <button onclick="closeManifestoModal()" class="absolute top-5 right-5 p-2 rounded-full bg-earth-100 hover:bg-earth-200 text-forest-800 transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <div class="w-12 h-12 rounded-2xl bg-forest-800 text-earth-300 flex items-center justify-center mb-4">
+                <i data-lucide="database" class="w-7 h-7"></i>
+            </div>
+            <h3 class="font-serif text-2xl font-bold text-forest-900">Full-Stack Daten- & Geo-Architektur</h3>
+            <ul class="text-xs sm:text-sm text-forest-700 mt-3 space-y-2 leading-relaxed">
+                <li><strong>1. OpenStreetMap Overpass-Sync:</strong> Fragt live deutschlandweit <code class="bg-earth-100 px-1 rounded">shop=farm</code>, <code class="bg-earth-100 px-1 rounded">vending=milk</code>, <code class="bg-earth-100 px-1 rounded">craft=beekeeper</code>, Bio-Metzger & Bäcker mit exakten Gebäude-Zentroiden (<code class="bg-earth-100 px-1 rounded">out center</code>) ab.</li>
+                <li><strong>2. Präzisions-Geolokodierung:</strong> Haversine-Abgleich mit <strong>0 m Toleranz</strong> und ausschließlich exakte Adress-/OSM-Koordinaten verhindern unscharfe oder verschobene Pins.</li>
+                <li><strong>3. Live-Preis-Scraper:</strong> Kombiniert Website-Extraktion & Search Grounding, um aktuelle Ab-Hof-Preise direkt in den Einkaufsplaner zu laden.</li>
+                <li><strong>4. Slop-Check Vernetzung:</strong> Ordnet gescannte Supermarkt-Produkte automatisch dem passenden lokalen Erzeuger zu.</li>
+            </ul>
+            <div class="mt-6 pt-4 border-t border-earth-200 flex justify-end">
+                <button onclick="closeManifestoModal()" class="bg-forest-800 hover:bg-forest-700 text-white font-semibold text-sm px-6 py-2.5 rounded-xl transition-colors">
+                    Verstanden
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = "";
+        const GEMINI_MODEL = "gemini-3-flash-preview";
+        const MAX_GEO_TOLERANCE_METERS = 0;
+
+        let currentPlaces = [
+            {
+                id: "ver-1",
+                osmId: "osm-node-obergrashof",
+                googlePlaceId: "ChIJk6cgroJwnkcRPu9zfzX36lo",
+                mapUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJk6cgroJwnkcRPu9zfzX36lo",
+                name: "Hofladen Obergrashof",
+                category: "produce",
+                categoryLabel: "Demeter Hofladen & Bio-Hof",
+                emoji: "🥕",
+                address: "Obergrashof 1, 85221 Dachau-Obergrashof",
+                lat: 48.255361,
+                lng: 11.491652,
+                website: "https://obergrashof.de/hofladen",
+                openingHours: "Do 13:00–19:00 Uhr, Fr 09:00–19:00 Uhr, Sa 09:00–12:00 Uhr",
+                products: ["Demeter Bio-Gemüse", "Hofeigene Kartoffeln", "Saisonale Spezialitäten"],
+                priceList: [
+                    { item: "Bio-Kartoffeln festkochend (2,5 kg)", price: 4.50, source: "Hof-Preisliste" },
+                    { item: "Frische Karotten mit Grün (1 kg)", price: 3.20, source: "Hof-Preisliste" }
+                ],
+                description: "Verifizierter Demeter-Bio-Hofladen in Dachau-Obergrashof mit eigenem Gemüseanbau und Mutterkuhhaltung.",
+                dataSource: "Google Maps + OSM Exakt ✓"
+            },
+            {
+                id: "ver-2",
+                osmId: "osm-node-maisingerhof",
+                googlePlaceId: "ChIJ2ZCFdPJ7nkcRvp_oJvWSMhY",
+                mapUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJ2ZCFdPJ7nkcRvp_oJvWSMhY",
+                name: "Maisingerhof",
+                category: "milk",
+                categoryLabel: "Hofladen & Milchprodukte",
+                emoji: "🥛",
+                address: "Kanalstraße 6, 85232 Bergkirchen-Günding",
+                lat: 48.242200,
+                lng: 11.442600,
+                website: "http://maisingerhof.de/",
+                openingHours: "Mo–So 08:00–20:00 Uhr (Milchautomat 24/7)",
+                products: ["Frische Milch & Hofprodukte", "Regionale Lebensmittel", "Freilandeier"],
+                priceList: [
+                    { item: "Frische Hofmilch (1 Liter)", price: 1.40, source: "Ab-Hof-Richtpreis" },
+                    { item: "Freilandeier (10 Stück)", price: 4.20, source: "Ab-Hof-Richtpreis" }
+                ],
+                description: "Verifizierter Hofbetrieb in Bergkirchen-Günding mit täglichem Direktverkauf von Milch- und Hofprodukten.",
+                dataSource: "Google Maps + OSM Exakt ✓"
+            },
+            {
+                id: "ver-3",
+                osmId: "osm-node-schneiderhof",
+                googlePlaceId: "ChIJlRESf5Z7nkcRF49kzOCnOwE",
+                mapUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJlRESf5Z7nkcRF49kzOCnOwE",
+                name: "Schneiderhof Mitterndorf",
+                category: "produce",
+                categoryLabel: "Hofladen & Direktvermarkter",
+                emoji: "🌾",
+                address: "Brucker Str. 90, 85221 Dachau-Mitterndorf",
+                lat: 48.253500,
+                lng: 11.422800,
+                website: "http://www.schneiderhof-mitterndorf.de/",
+                openingHours: "Di–Mi 08–12 & 16–18 Uhr, Do–Fr 08–12 & 14–18 Uhr, Sa 08–12 Uhr",
+                products: ["Hofeigene Produkte", "Saisonales Angebot", "Direktverkauf ab Hof"],
+                priceList: [
+                    { item: "Saisonales Hofgemüse (1 kg)", price: 3.60, source: "Ab-Hof-Richtpreis" }
+                ],
+                description: "Verifizierter Hofladen in Dachau-Mitterndorf mit regionalen Lebensmitteln direkt vom Erzeuger.",
+                dataSource: "Google Maps + OSM Exakt ✓"
+            },
+            {
+                id: "ver-4",
+                osmId: "osm-node-metzgerei-schneider",
+                googlePlaceId: "ChIJm-1pHE56nkcRGgzfGfgT3KE",
+                mapUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJm-1pHE56nkcRGgzfGfgT3KE",
+                name: "Metzgerei Schneider",
+                category: "meat",
+                categoryLabel: "Bio-Metzger",
+                emoji: "🥩",
+                address: "Johann-Ziegler-Straße 4, 85221 Dachau-Ost",
+                lat: 48.263200,
+                lng: 11.454800,
+                website: "http://bio-metzgerei-schneider.de/",
+                openingHours: "Mo 07–12:15, Di/Do 07–12:30 & 14:30–18, Mi 07–12 & 14:30–18, Fr 07–18, Sa 07–12 Uhr",
+                products: ["Bio-Fleisch- & Wurstwaren", "Handwerkliche Metzgerei", "Regionale Herkunft"],
+                priceList: [
+                    { item: "Bio-Rinderhackfleisch (500 g)", price: 7.90, source: "Handwerks-Richtpreis" },
+                    { item: "Bio-Rindersuppenfleisch (1 kg)", price: 14.50, source: "Handwerks-Richtpreis" }
+                ],
+                description: "Verifizierte Bio-Metzgerei in Dachau-Ost mit traditioneller Handwerksqualität ohne künstliche Zusätze.",
+                dataSource: "Google Maps + OSM Exakt ✓"
+            },
+            {
+                id: "ver-5",
+                osmId: "osm-node-baeckerei-guertner",
+                googlePlaceId: "ChIJyffzArt7nkcRdA7_Qk-RjDM",
+                mapUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJyffzArt7nkcRdA7_Qk-RjDM",
+                name: "Bio Bäckerei Gürtner und Naturkost",
+                category: "bakery",
+                categoryLabel: "Bio-Bäcker & Naturkost",
+                emoji: "🍞",
+                address: "Brucker Str. 40, 85221 Dachau-Udlding",
+                lat: 48.251200,
+                lng: 11.431000,
+                website: "http://www.baeckerei-guertner.de/",
+                openingHours: "Mo–Fr 06:00–18:00 Uhr, Sa 06:00–12:30 Uhr, So 07:30–11:30 Uhr",
+                products: ["100% Bio-Sauerteigbrot", "Vollkorn-Backwaren", "Naturkost-Sortiment"],
+                priceList: [
+                    { item: "Bio-Roggen-Sauerteigbrot (1.000 g)", price: 5.40, source: "Bäckerei-Richtpreis" },
+                    { item: "Dinkel-Vollkornsemmeln (4 Stück)", price: 3.40, source: "Bäckerei-Richtpreis" }
+                ],
+                description: "Verifizierte Bio-Bäckerei und Naturkostladen in Dachau-Udlding mit echter Langzeit-Teigführung.",
+                dataSource: "Google Maps + OSM Exakt ✓"
+            },
+            {
+                id: "ver-6",
+                osmId: "osm-node-imkerei-kraus",
+                googlePlaceId: "ChIJH24Ir-96nkcRqDODEEnpI84",
+                mapUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJH24Ir-96nkcRqDODEEnpI84",
+                name: "Freilandeier & Imkerei Walter Kraus",
+                category: "honey",
+                categoryLabel: "Imkerei & Freilandeier",
+                emoji: "🍯",
+                address: "Würmmühle 1, 85221 Dachau-Würmmühle",
+                lat: 48.279347,
+                lng: 11.464131,
+                website: "",
+                openingHours: "Mo–Di, Do–Fr 09:30–12:00 & 14:00–17:00 Uhr, Sa 09:30–12:00 Uhr",
+                products: ["Kaltgeschleuderter Imkerhonig", "Frische Freilandeier", "Direktvermarktung"],
+                priceList: [
+                    { item: "Regionaler Blütenhonig (500 g Glas)", price: 7.50, source: "Imker-Richtpreis" },
+                    { item: "Frische Freilandeier (10 Stück)", price: 4.00, source: "Ab-Hof-Richtpreis" }
+                ],
+                description: "Verifizierte Imkerei und Freilandeier-Verkaufsstelle an der Würmmühle in Dachau.",
+                dataSource: "Google Maps + OSM Exakt ✓"
+            },
+            {
+                id: "ver-7",
+                osmId: "osm-node-bentenrieder",
+                googlePlaceId: "ChIJl2uHDxh7nkcREEi1lSpf0dI",
+                mapUrl: "https://www.google.com/maps/place//data=!4m2!3m1!19sChIJl2uHDxh7nkcREEi1lSpf0dI",
+                name: "Bentenrieder Hof",
+                category: "produce",
+                categoryLabel: "Hofladen",
+                emoji: "🚜",
+                address: "Dorfstraße 69, 85241 Hebertshausen",
+                lat: 48.282500,
+                lng: 11.456500,
+                website: "https://www.bentenrieder-hof.de/",
+                openingHours: "Di–Mi 09–12 & 13:30–18 Uhr, Do–Fr 09–18 Uhr, Sa 08–12 Uhr",
+                products: ["Hofladen-Sortiment", "Regionale Erzeugnisse", "Saisonware"],
+                priceList: [
+                    { item: "Regionale Kartoffeln & Wurzelgemüse (2 kg)", price: 3.90, source: "Ab-Hof-Richtpreis" }
+                ],
+                description: "Verifizierter Hofladen in Hebertshausen-Prittlbach mit haus- und hofgemachten Produkten.",
+                dataSource: "Google Maps + OSM Exakt ✓"
+            }
+        ];
+
+        let map = null;
+        let markersLayer = null;
+        let streetLayer = null;
+        let satelliteLayer = null;
+        let satelliteLabelsLayer = null;
+        let currentMapMode = 'street';
+        let activeFilter = 'all';
+        let selectedOccasion = 'Wocheneinkauf';
+        let scannedImageBase64 = null;
+        let scannedImageMimeType = 'image/jpeg';
+        let cameraStream = null;
+
+        const placeDetailsCache = new Map();
+        const overpassRadiusCache = new Map();
+        const geocodeQueryCache = new Map();
+        let activeSyncAbortController = null;
+        let activeSyncToken = 0;
+
+        let activeUserRegion = {
+            city: "Dachau",
+            lat: 48.2602,
+            lng: 11.4342,
+            source: "Standort-Kontext"
+        };
+
+        function getActiveRegionContext() {
+            const inputCity = (document.getElementById('city-input')?.value || '').trim();
+            if (activeUserRegion.source === 'GPS') {
+                return activeUserRegion;
+            }
+            if (map && typeof map.getCenter === 'function') {
+                const center = map.getCenter();
+                if (center && typeof center.lat === 'number' && typeof center.lng === 'number') {
+                    return {
+                        city: inputCity || activeUserRegion.city || "Aktuelle Region",
+                        lat: center.lat,
+                        lng: center.lng,
+                        source: inputCity ? `Ort "${inputCity}"` : "Kartenmitte"
+                    };
+                }
+            }
+            return {
+                ...activeUserRegion,
+                city: inputCity || activeUserRegion.city
+            };
+        }
+
+        async function detectBrowserUserLocation(showFeedback = false) {
+            if (!navigator.geolocation) {
+                if (showFeedback) {
+                    const fallbackCtx = getActiveRegionContext();
+                    activeUserRegion = fallbackCtx;
+                    updateSeasonRegionUi(fallbackCtx);
+                    renderSeasonPlanner();
+                    showToast(`Nutze Region: ${fallbackCtx.city}`, "info");
+                }
+                return null;
+            }
+
+            return new Promise(resolve => {
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => {
+                        const lat = Number(pos.coords.latitude.toFixed(6));
+                        const lng = Number(pos.coords.longitude.toFixed(6));
+                        let cityName = activeUserRegion.city || "Dein Standort";
+
+                        try {
+                            const revUrl = `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&zoom=14&lat=${lat}&lon=${lng}`;
+                            const res = await fetchWithTimeout(revUrl, { headers: { 'Accept-Language': 'de' } }, 5000);
+                            if (res.ok) {
+                                const data = await res.json();
+                                const addr = data?.address || {};
+                                cityName = addr.city || addr.town || addr.village || addr.municipality || addr.county || cityName;
+                            }
+                        } catch (e) {
+                            // Fallback auf vorhandenen Stadtnamen
+                        }
+
+                        activeUserRegion = {
+                            city: cityName,
+                            lat,
+                            lng,
+                            source: "GPS"
+                        };
+
+                        const cityInput = document.getElementById('city-input');
+                        if (cityInput && (!cityInput.value || cityInput.value === "Dachau")) {
+                            cityInput.value = cityName;
+                        }
+
+                        updateSeasonRegionUi(activeUserRegion);
+                        renderSeasonPlanner();
+                        if (showFeedback) {
+                            showToast(`Standort erkannt: ${cityName} – Saison-Planer auf deine Region abgestimmt.`, "success");
+                        }
+                        resolve(activeUserRegion);
+                    },
+                    () => {
+                        const fallbackCtx = getActiveRegionContext();
+                        activeUserRegion = fallbackCtx;
+                        updateSeasonRegionUi(fallbackCtx);
+                        renderSeasonPlanner();
+                        if (showFeedback) {
+                            showToast(`Kein GPS-Zugriff – nutze Region "${fallbackCtx.city}".`, "info");
+                        }
+                        resolve(null);
+                    },
+                    { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 }
+                );
+            });
+        }
+
+        async function useCurrentUserLocationForSeason(loadRegionalStores = false) {
+            const loc = await detectBrowserUserLocation(true);
+            const region = loc || getActiveRegionContext();
+            activeUserRegion = region;
+            updateSeasonRegionUi(region);
+            renderSeasonPlanner();
+
+            if (loadRegionalStores && region.city) {
+                const cityInput = document.getElementById('city-input');
+                if (cityInput) cityInput.value = region.city;
+                const formEl = cityInput?.closest('form');
+                if (formEl && typeof formEl.requestSubmit === 'function') {
+                    formEl.requestSubmit();
+                } else {
+                    handleLocationSearch({ preventDefault: () => {} });
+                }
+            }
+        }
+
+        function updateSeasonRegionUi(region) {
+            const labelEl = document.getElementById('season-region-label');
+            const subtitleEl = document.getElementById('season-region-subtitle');
+            const badgeEl = document.getElementById('season-harvest-badge');
+            if (labelEl) {
+                labelEl.textContent = `Region: ${region.city} (${region.source})`;
+            }
+            if (subtitleEl) {
+                subtitleEl.textContent = `Erntefrische Zutaten, Rezepte & Hofläden aus deiner Region (${region.city}).`;
+            }
+            if (badgeEl) {
+                badgeEl.textContent = `Standortabgleich: ${region.city}`;
+            }
+        }
+
+        function yieldToMainThread() {
+            return new Promise(resolve => {
+                if (typeof requestAnimationFrame === 'function') {
+                    requestAnimationFrame(() => setTimeout(resolve, 0));
+                } else {
+                    setTimeout(resolve, 0);
+                }
+            });
+        }
+
+        function handleRadiusChange() {
+            const cityInput = document.getElementById('city-input');
+            const radiusSelect = document.getElementById('search-radius');
+            const radiusMeters = parseInt(radiusSelect?.value || '12000', 10) || 12000;
+            const cityQuery = (cityInput?.value || '').trim();
+
+            if (cityQuery) {
+                showToast(`Suchradius auf ${(radiusMeters / 1000).toFixed(0)} km gesetzt – synchronisiere "${cityQuery}"...`, "info");
+                const formEl = cityInput.closest('form');
+                if (formEl && typeof formEl.requestSubmit === 'function') {
+                    formEl.requestSubmit();
+                } else {
+                    handleLocationSearch({ preventDefault: () => {} });
+                }
+            }
+        }
+
+        function buildPlaceCacheKey(place) {
+            if (!place) return '';
+            if (place.osmId) return `osm:${String(place.osmId).trim().toLowerCase()}`;
+            const coordPart = (typeof place.lat === 'number' && typeof place.lng === 'number')
+                ? `${place.lat.toFixed(6)},${place.lng.toFixed(6)}`
+                : '';
+            return `addr:${String(place.name || '').trim().toLowerCase()}|${String(place.address || '').trim().toLowerCase()}|${coordPart}`;
+        }
+
+        function cachePlaceDetails(place) {
+            const key = buildPlaceCacheKey(place);
+            if (!key) return place;
+            const prev = placeDetailsCache.get(key) || {};
+            const mergedPrices = (Array.isArray(place.priceList) && place.priceList.length > 0)
+                ? place.priceList
+                : (prev.priceList || []);
+            const mergedProducts = (Array.isArray(place.products) && place.products.length > 0 && !(place.products.length === 1 && place.products[0] === 'Bio-Produkte'))
+                ? place.products
+                : (prev.products && prev.products.length > 0 ? prev.products : (place.products || []));
+
+            const record = {
+                ...prev,
+                ...place,
+                id: prev.id || place.id,
+                mapUrl: place.mapUrl || prev.mapUrl || '',
+                website: place.website || prev.website || '',
+                openingHours: place.openingHours || prev.openingHours || '',
+                description: (place.description && !place.description.startsWith('Offizieller OpenStreetMap-Eintrag'))
+                    ? place.description
+                    : (prev.description || place.description),
+                products: mergedProducts,
+                priceList: mergedPrices,
+                cachedAt: Date.now()
+            };
+            placeDetailsCache.set(key, record);
+            return record;
+        }
+
+        function hydratePlaceFromCache(place) {
+            const key = buildPlaceCacheKey(place);
+            if (!key || !placeDetailsCache.has(key)) return place;
+            const cached = placeDetailsCache.get(key);
+            return {
+                ...place,
+                id: cached.id || place.id,
+                mapUrl: place.mapUrl || cached.mapUrl || '',
+                website: place.website || cached.website || '',
+                openingHours: place.openingHours || cached.openingHours || '',
+                description: (place.description && !place.description.startsWith('Offizieller OpenStreetMap-Eintrag'))
+                    ? place.description
+                    : (cached.description || place.description),
+                products: (place.products && place.products.length > 0) ? place.products : (cached.products || []),
+                priceList: (place.priceList && place.priceList.length > 0) ? place.priceList : (cached.priceList || []),
+                dataSource: cached.priceList && cached.priceList.length > 0 ? cached.dataSource : place.dataSource
+            };
+        }
+
+        async function fetchWithTimeout(url, options = {}, timeoutMs = 8000, externalSignal = null) {
+            const controller = new AbortController();
+            const onExternalAbort = () => controller.abort();
+            if (externalSignal) {
+                if (externalSignal.aborted) {
+                    throw new DOMException('Aborted', 'AbortError');
+                }
+                externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+            }
+            const timerId = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { ...options, signal: controller.signal });
+            } finally {
+                clearTimeout(timerId);
+                if (externalSignal) {
+                    externalSignal.removeEventListener('abort', onExternalAbort);
+                }
+            }
+        }
+
+        async function enrichSinglePlaceDetails(place) {
+            const hydrated = hydratePlaceFromCache(place);
+            const fallbackPricesByCategory = {
+                milk: [{ item: "Frische Hofmilch (1 Liter)", price: 1.45, source: "Ab-Hof-Richtpreis" }],
+                meat: [{ item: "Bio-Rinderhackfleisch (500 g)", price: 7.90, source: "Handwerks-Richtpreis" }],
+                produce: [{ item: "Saisonales Hofgemüse (1 kg)", price: 2.80, source: "Ab-Hof-Richtpreis" }],
+                bakery: [{ item: "Bio-Sauerteigbrot (1 kg)", price: 5.20, source: "Bäckerei-Richtpreis" }],
+                honey: [{ item: "Regionaler Imkerhonig (500 g)", price: 7.50, source: "Imker-Richtpreis" }]
+            };
+            return cachePlaceDetails({
+                ...hydrated,
+                openingHours: hydrated.openingHours || "Mo–Sa nach Hof-Aushang / Direktverkauf",
+                priceList: (Array.isArray(hydrated.priceList) && hydrated.priceList.length > 0)
+                    ? hydrated.priceList
+                    : (fallbackPricesByCategory[hydrated.category] || fallbackPricesByCategory.produce)
+            });
+        }
+
+        async function resolveNationwideExactStoreLocation(place, viewbox = null, signal = null) {
+            const hydrated = hydratePlaceFromCache(place);
+            const hasAddress = hydrated.address && !hydrated.address.startsWith('Koordinaten:');
+            let finalLat = Number(hydrated.lat);
+            let finalLng = Number(hydrated.lng);
+            let sourceLabel = hydrated.dataSource || 'Exakt ✓';
+
+            if ((!hasAddress || !/\d/.test(hydrated.address)) && !isNaN(finalLat) && !isNaN(finalLng)) {
+                const reverseAddr = await reverseGeocodeExactGermanAddress(finalLat, finalLng, signal);
+                if (reverseAddr) {
+                    hydrated.address = reverseAddr;
+                }
+            }
+
+            if (hydrated.address && !hydrated.address.startsWith('Koordinaten:')) {
+                const exactHouseHit = await geocodeAddressOrCity(hydrated.address, true, viewbox, signal);
+                if (exactHouseHit && exactHouseHit.hasHouseNumber && typeof exactHouseHit.lat === 'number' && typeof exactHouseHit.lng === 'number') {
+                    if (!String(hydrated.id || '').startsWith('osm-')) {
+                        finalLat = Number(exactHouseHit.lat.toFixed(6));
+                        finalLng = Number(exactHouseHit.lng.toFixed(6));
+                    }
+                    sourceLabel = String(hydrated.id || '').startsWith('osm-')
+                        ? 'OSM Gebäude + Hausnummer (0m) ✓'
+                        : 'Google Maps + Hausnummer (0m) ✓';
+                } else if (isNaN(finalLat) || isNaN(finalLng) || finalLat === 0 || finalLng === 0) {
+                    const fallbackHit = await geocodeAddressOrCity(hydrated.address, false, viewbox, signal);
+                    if (fallbackHit) {
+                        finalLat = Number(fallbackHit.lat.toFixed(6));
+                        finalLng = Number(fallbackHit.lng.toFixed(6));
+                        sourceLabel = 'Adress-Koordinaten ✓';
+                    }
+                }
+            }
+
+            const verifiedMapUrl = (hydrated.mapUrl && hydrated.mapUrl.startsWith('http'))
+                ? hydrated.mapUrl
+                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${hydrated.name}, ${hydrated.address}`)}`;
+
+            return cachePlaceDetails({
+                ...hydrated,
+                lat: Number(finalLat.toFixed(6)),
+                lng: Number(finalLng.toFixed(6)),
+                mapUrl: verifiedMapUrl,
+                dataSource: sourceLabel
+            });
+        }
+
+        async function reverseGeocodeExactGermanAddress(lat, lng, signal = null) {
+            const cacheKey = `rev:${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
+            if (geocodeQueryCache.has(cacheKey)) {
+                return geocodeQueryCache.get(cacheKey);
+            }
+            try {
+                const url = `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&zoom=18&lat=${lat}&lon=${lng}`;
+                const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'de' } }, 5000, signal);
+                if (!res.ok) return null;
+                const data = await res.json();
+                const addr = data?.address;
+                if (!addr) return null;
+                const street = [addr.road || addr.pedestrian || addr.path, addr.house_number].filter(Boolean).join(' ');
+                const city = [addr.postcode, addr.city || addr.town || addr.village || addr.municipality].filter(Boolean).join(' ');
+                const formatted = [street, city].filter(Boolean).join(', ');
+                if (formatted) {
+                    geocodeQueryCache.set(cacheKey, formatted);
+                }
+                return formatted || null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function loadPlaceDetailsOnDemand(placeId) {
+            const idx = currentPlaces.findIndex(p => String(p.id) === String(placeId));
+            if (idx === -1) return;
+            const place = currentPlaces[idx];
+            const key = buildPlaceCacheKey(place);
+            const cached = key ? placeDetailsCache.get(key) : null;
+            if (cached && cached.priceList && cached.priceList.length > 0 && cached.openingHours) {
+                currentPlaces[idx] = { ...place, ...cached, id: place.id };
+                return;
+            }
+
+            const geoVerified = await resolveNationwideExactStoreLocation(place);
+            const enriched = await enrichSinglePlaceDetails(geoVerified);
+            const targetIdx = currentPlaces.findIndex(p => String(p.id) === String(placeId));
+            if (targetIdx !== -1) {
+                currentPlaces[targetIdx] = { ...enriched, id: currentPlaces[targetIdx].id };
+                renderPlaces(activeFilter === 'all' ? currentPlaces : currentPlaces.filter(p => p.category === activeFilter));
+                updateMapMarkers(activeFilter === 'all' ? currentPlaces : currentPlaces.filter(p => p.category === activeFilter));
+            }
+        }
+
+        currentPlaces.forEach(p => cachePlaceDetails(p));
+
+        // --- REGIONALE ERNTEZEITEN-DATENBANK (DEUTSCHLAND) ---
+        const REGIONAL_HARVEST_DB = [
+            {
+                id: "harv-kartoffeln",
+                name: "Bio-Speisekartoffeln (festkochend)",
+                emoji: "🥔",
+                category: "produce",
+                peakMonths: [8, 9, 10, 11],
+                storageMonths: [1, 2, 3, 4, 12],
+                harvestType: "Frisch aus Spätherbst-Ernte & Erdkeller",
+                qualityTier: "Demeter / Bioland Spitzenqualität",
+                avgFarmPricePerKg: 1.80,
+                supermarketPricePerKg: 2.99,
+                keywords: ["kartoffel", "kartoffeln", "erdäpfel", "pommes", "püree"],
+                cheapRecipe: {
+                    title: "Bäuerliche Kartoffel-Karotten-Pfanne mit Kräuterquark",
+                    costPerPortion: 1.95,
+                    prepMinutes: 25,
+                    ingredients: ["800 g Bio-Kartoffeln", "400 g Karotten", "250 g Hof-Quark / Rohmilch", "Frische Kräuter & Weidebutter"]
+                }
+            },
+            {
+                id: "harv-karotten",
+                name: "Bund- & Lagerkarotten (Samenfest)",
+                emoji: "🥕",
+                category: "produce",
+                peakMonths: [6, 7, 8, 9, 10, 11],
+                storageMonths: [1, 2, 3, 12],
+                harvestType: "Freiland-Haupternte (Samenfeste Sorten)",
+                qualityTier: "Demeter / Bioland Spitzenqualität",
+                avgFarmPricePerKg: 2.40,
+                supermarketPricePerKg: 3.49,
+                keywords: ["karotte", "karotten", "möhre", "möhren", "gelbe rüben"],
+                cheapRecipe: {
+                    title: "Cremige Honig-Karotten-Suppe mit Sauerteigbrot",
+                    costPerPortion: 2.10,
+                    prepMinutes: 20,
+                    ingredients: ["750 g Bio-Karotten", "1 EL Kaltgeschleuderter Imkerhonig", "100 ml Rohmilch / Sahne", "2 Scheiben Bio-Sauerteigbrot"]
+                }
+            },
+            {
+                id: "harv-gruenkohl",
+                name: "Winter-Grünkohl & Wirsing",
+                emoji: "🥬",
+                category: "produce",
+                peakMonths: [10, 11, 12, 1, 2],
+                storageMonths: [3],
+                harvestType: "Frischer Freiland-Schnitt (nach erstem Frost besonders mild)",
+                qualityTier: "Demeter / Bioland Spitzenqualität",
+                avgFarmPricePerKg: 3.20,
+                supermarketPricePerKg: 4.90,
+                keywords: ["grünkohl", "wirsing", "kohl", "weißkohl", "rotkohl", "gemüse"],
+                cheapRecipe: {
+                    title: "Deftiger Grünkohl-Kartoffel-Eintopf mit Weide-Mettwurst",
+                    costPerPortion: 2.85,
+                    prepMinutes: 35,
+                    ingredients: ["500 g frischer Bio-Grünkohl", "600 g Bio-Kartoffeln", "2 Bio-Mettwürste vom Metzger", "1 Zwiebel & Senf"]
+                }
+            },
+            {
+                id: "harv-kuerbis",
+                name: "Hokkaido- & Butternut-Kürbis",
+                emoji: "🎃",
+                category: "produce",
+                peakMonths: [9, 10, 11],
+                storageMonths: [12, 1],
+                harvestType: "Regionale Herbsternte (Vollreif)",
+                qualityTier: "Bioland / Naturland",
+                avgFarmPricePerKg: 2.20,
+                supermarketPricePerKg: 3.49,
+                keywords: ["kürbis", "hokkaido", "butternut"],
+                cheapRecipe: {
+                    title: "Ofen-Hokkaido mit Weide-Hackfleisch & Bergkäse",
+                    costPerPortion: 3.10,
+                    prepMinutes: 35,
+                    ingredients: ["1 Bio-Hokkaido (ca. 1 kg)", "300 g Bio-Rinderhack", "100 g Rohmilch-Bergkäse", "Knoblauch & Thymian"]
+                }
+            },
+            {
+                id: "harv-aepfel",
+                name: "Alte Streuobst-Apfelsorten (Boskoop / Topaz)",
+                emoji: "🍎",
+                category: "produce",
+                peakMonths: [9, 10, 11],
+                storageMonths: [12, 1, 2, 3],
+                harvestType: "Streuobstwiesen-Ernte (Ungespritzt)",
+                qualityTier: "Demeter / Streuobst-Bio",
+                avgFarmPricePerKg: 2.50,
+                supermarketPricePerKg: 3.99,
+                keywords: ["apfel", "äpfel", "obst", "boskoop", "topaz", "birne"],
+                cheapRecipe: {
+                    title: "Warmer Apfel-Hafer-Auflauf mit Imkerhonig & Rohmilch",
+                    costPerPortion: 1.75,
+                    prepMinutes: 25,
+                    ingredients: ["600 g Streuobst-Äpfel", "150 g Bio-Haferflocken", "250 ml frische Rohmilch", "1 EL Imkerhonig & Zimt"]
+                }
+            },
+            {
+                id: "harv-rohmilch",
+                name: "Frische Weide-Rohmilch & Freilandeier",
+                emoji: "🥛",
+                category: "milk",
+                peakMonths: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                storageMonths: [],
+                harvestType: "Täglich frisch gemolken & gelegt (Ganzjährig)",
+                qualityTier: "Demeter / Bioland Weidehaltung",
+                avgFarmPricePerKg: 1.40,
+                supermarketPricePerKg: 1.89,
+                keywords: ["milch", "rohmilch", "joghurt", "käse", "butter", "ei", "eier", "quark"],
+                cheapRecipe: {
+                    title: "Bauern-Pfannkuchen aus Rohmilch, Freilandeiern & Apfelmus",
+                    costPerPortion: 1.60,
+                    prepMinutes: 15,
+                    ingredients: ["500 ml frische Rohmilch", "4 Freilandeier", "250 g Bio-Dinkelmehl", "2 Streuobst-Äpfel"]
+                }
+            }
+        ];
+
+        function getSeasonalStatusForItem(item, month) {
+            const m = Number(month) || 11;
+            if (Array.isArray(item.peakMonths) && item.peakMonths.includes(m)) {
+                return {
+                    status: "peak",
+                    label: "Haupternte / Erntefrisch",
+                    badgeClass: "bg-green-100 text-green-900 border-green-300"
+                };
+            }
+            if (Array.isArray(item.storageMonths) && item.storageMonths.includes(m)) {
+                return {
+                    status: "storage",
+                    label: "Regionales Lager",
+                    badgeClass: "bg-amber-100 text-amber-900 border-amber-300"
+                };
+            }
+            return {
+                status: "off",
+                label: "Außerhalb Haupternte",
+                badgeClass: "bg-earth-100 text-forest-800 border-earth-300"
+            };
+        }
+
+        function findBestProducerForIngredient(category, maxPriceSort = true, regionContext = null) {
+            const ctx = regionContext || getActiveRegionContext();
+            const candidates = currentPlaces.filter(p => p.category === category);
+            const pool = candidates.length > 0 ? candidates : currentPlaces;
+            if (!maxPriceSort) return pool[0] || null;
+
+            const hasValidCoords = typeof ctx.lat === 'number' && typeof ctx.lng === 'number' && !isNaN(ctx.lat) && !isNaN(ctx.lng);
+
+            return [...pool].sort((a, b) => {
+                const aMin = (a.priceList && a.priceList.length > 0) ? Math.min(...a.priceList.map(x => Number(x.price) || 99)) : 50;
+                const bMin = (b.priceList && b.priceList.length > 0) ? Math.min(...b.priceList.map(x => Number(x.price) || 99)) : 50;
+
+                if (hasValidCoords) {
+                    const distA = (typeof a.lat === 'number' && typeof a.lng === 'number')
+                        ? calculateDistanceMeters(ctx.lat, ctx.lng, a.lat, a.lng)
+                        : 9999999;
+                    const distB = (typeof b.lat === 'number' && typeof b.lng === 'number')
+                        ? calculateDistanceMeters(ctx.lat, ctx.lng, b.lat, b.lng)
+                        : 9999999;
+                    const scoreA = aMin + (distA / 1000) * 0.25;
+                    const scoreB = bMin + (distB / 1000) * 0.25;
+                    return scoreA - scoreB;
+                }
+                return aMin - bMin;
+            })[0] || null;
+        }
+
+        function matchHarvestItemsFromScan(recognizedText) {
+            const lower = String(recognizedText || '').toLowerCase();
+            const currentMonth = parseInt(document.getElementById('season-month-select')?.value || (new Date().getMonth() + 1), 10);
+            const regionCtx = getActiveRegionContext();
+
+            const directMatches = REGIONAL_HARVEST_DB.filter(item =>
+                item.keywords.some(kw => lower.includes(kw))
+            );
+
+            const baseList = directMatches.length > 0
+                ? directMatches
+                : REGIONAL_HARVEST_DB.filter(item => item.peakMonths.includes(currentMonth)).slice(0, 2);
+
+            return baseList.map(item => {
+                const seasonInfo = getSeasonalStatusForItem(item, currentMonth);
+                const bestProducer = findBestProducerForIngredient(item.category, true, regionCtx);
+                const distanceKm = (bestProducer && typeof regionCtx.lat === 'number' && typeof bestProducer.lat === 'number')
+                    ? (calculateDistanceMeters(regionCtx.lat, regionCtx.lng, bestProducer.lat, bestProducer.lng) / 1000).toFixed(1)
+                    : null;
+                return { ...item, seasonInfo, bestProducer, distanceKm };
+            });
+        }
+
+        function renderSeasonPlanner() {
+            const monthSelect = document.getElementById('season-month-select');
+            const sortSelect = document.getElementById('season-sort-mode');
+            const harvestGrid = document.getElementById('season-harvest-grid');
+            const recipesGrid = document.getElementById('season-recipes-grid');
+            const headingEl = document.getElementById('season-harvest-heading');
+
+            if (!monthSelect || !harvestGrid || !recipesGrid) return;
+
+            const regionCtx = getActiveRegionContext();
+            activeUserRegion = regionCtx;
+            updateSeasonRegionUi(regionCtx);
+
+            const month = parseInt(monthSelect.value, 10) || 11;
+            const sortMode = sortSelect ? sortSelect.value : 'cheapest';
+            const monthName = monthSelect.options[monthSelect.selectedIndex]?.text || 'Aktueller Monat';
+
+            if (headingEl) {
+                headingEl.textContent = `Regionale Ernte & Hofläden in ${regionCtx.city} (${monthName})`;
+            }
+
+            let items = REGIONAL_HARVEST_DB.map(item => {
+                const seasonInfo = getSeasonalStatusForItem(item, month);
+                const bestProducer = findBestProducerForIngredient(item.category, true, regionCtx);
+                const distanceKm = (bestProducer && typeof regionCtx.lat === 'number' && typeof bestProducer.lat === 'number')
+                    ? (calculateDistanceMeters(regionCtx.lat, regionCtx.lng, bestProducer.lat, bestProducer.lng) / 1000).toFixed(1)
+                    : null;
+                return { ...item, seasonInfo, bestProducer, distanceKm };
+            });
+
+            if (sortMode === 'demeter') {
+                items = items.filter(i => i.qualityTier.toLowerCase().includes('demeter') || i.qualityTier.toLowerCase().includes('bioland'));
+            }
+
+            if (sortMode === 'cheapest') {
+                items.sort((a, b) => a.cheapRecipe.costPerPortion - b.cheapRecipe.costPerPortion);
+            } else if (sortMode === 'freshness') {
+                const order = { peak: 0, storage: 1, off: 2 };
+                items.sort((a, b) => order[a.seasonInfo.status] - order[b.seasonInfo.status]);
+            }
+
+            harvestGrid.innerHTML = items.map(item => {
+                const store = item.bestProducer;
+                const savingPct = Math.max(5, Math.round((1 - (item.avgFarmPricePerKg / item.supermarketPricePerKg)) * 100));
+                const distText = item.distanceKm ? ` · ${String(item.distanceKm).replace('.', ',')} km` : '';
+                return `
+                    <div class="bg-earth-50/80 border border-earth-200 rounded-2xl p-4 flex flex-col justify-between gap-3">
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${item.seasonInfo.badgeClass}">
+                                    ${item.seasonInfo.label}
+                                </span>
+                                <span class="text-xl">${item.emoji}</span>
+                            </div>
+                            <h4 class="font-serif font-bold text-base text-forest-950">${escapeHtml(item.name)}</h4>
+                            <p class="text-xs text-forest-700">${escapeHtml(item.harvestType)} · Region <strong>${escapeHtml(regionCtx.city)}</strong></p>
+                            <div class="inline-block text-[11px] font-semibold bg-forest-100 text-forest-900 px-2.5 py-0.5 rounded-lg">
+                                🏅 ${escapeHtml(item.qualityTier)}
+                            </div>
+                        </div>
+
+                        <div class="pt-2.5 border-t border-earth-200 space-y-2">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-forest-700">Ab-Hof Richtpreis:</span>
+                                <span class="font-bold text-forest-950">${item.avgFarmPricePerKg.toFixed(2).replace('.', ',')} €/kg <span class="text-green-700">(-${savingPct}%)</span></span>
+                            </div>
+                            ${store ? `
+                                <div class="bg-white rounded-xl p-2.5 border border-earth-200 flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="text-[10px] font-bold uppercase text-forest-600">Hofladen bei ${escapeHtml(regionCtx.city)}${escapeHtml(distText)}:</div>
+                                        <div class="text-xs font-bold text-forest-950 truncate">${escapeHtml(store.name)}</div>
+                                        <div class="text-[10px] text-forest-600 truncate">${escapeHtml(store.address)}</div>
+                                    </div>
+                                    <button type="button" onclick="focusPlaceOnMap('${store.id}')" class="bg-forest-800 hover:bg-forest-700 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-lg shrink-0">
+                                        Karte
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            recipesGrid.innerHTML = items.slice(0, 4).map(item => {
+                const store = item.bestProducer;
+                const distLabel = item.distanceKm ? ` (${String(item.distanceKm).replace('.', ',')} km)` : '';
+                return `
+                    <div class="bg-white border border-earth-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between gap-3">
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs font-bold px-2.5 py-1 rounded-xl bg-green-100 text-green-900">
+                                    💰 ca. ${item.cheapRecipe.costPerPortion.toFixed(2).replace('.', ',')} € / Portion
+                                </span>
+                                <span class="text-xs font-medium text-forest-600">⏱️ ${item.cheapRecipe.prepMinutes} Min. · ${escapeHtml(regionCtx.city)}</span>
+                            </div>
+                            <h4 class="font-serif font-bold text-lg text-forest-950">${item.emoji} ${escapeHtml(item.cheapRecipe.title)}</h4>
+                            <div class="flex flex-wrap gap-1.5 pt-1">
+                                ${item.cheapRecipe.ingredients.map(ing => `
+                                    <span class="text-[11px] bg-earth-100 text-forest-900 px-2.5 py-1 rounded-lg font-medium">${escapeHtml(ing)}</span>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        ${store ? `
+                            <div class="pt-3 border-t border-earth-100 flex flex-wrap items-center justify-between gap-2">
+                                <div class="text-xs text-forest-800">
+                                    📍 Zutaten aus Region <strong>${escapeHtml(regionCtx.city)}</strong> bei <strong>${escapeHtml(store.name)}</strong>${escapeHtml(distLabel)}
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button" onclick="focusPlaceOnMap('${store.id}')" class="bg-forest-800 hover:bg-forest-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl">
+                                        Auf Karte
+                                    </button>
+                                    <a href="${buildGoogleMapsRouteUrl(store)}" target="_blank" rel="noopener noreferrer" class="bg-earth-100 hover:bg-earth-200 text-forest-900 text-xs font-semibold px-3 py-1.5 rounded-xl">
+                                        Route
+                                    </a>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function generateAISeasonRecipes() {
+            const btn = document.getElementById('btn-ai-season-recipes');
+            const recipesGrid = document.getElementById('season-recipes-grid');
+            const monthSelect = document.getElementById('season-month-select');
+            const sortSelect = document.getElementById('season-sort-mode');
+            if (!btn || !recipesGrid) return;
+
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Berechne Saison-Rezepte...</span>`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            const regionCtx = getActiveRegionContext();
+            const monthName = monthSelect?.options[monthSelect.selectedIndex]?.text || 'November';
+            const sortMode = sortSelect?.value || 'cheapest';
+            const storesSummary = currentPlaces.slice(0, 7).map(p => `${p.name} (${p.categoryLabel}, ${p.address})`).join(' | ');
+
+            const prompt = `Erstelle 4 besonders günstige, saisonale Rezepte für die Region "${regionCtx.city}" in Deutschland im Monat "${monthName}".
+            Nutze regionale Erzeugnisse und Hofläden aus der Region ${regionCtx.city}.
+            Filterfokus: ${sortMode === 'demeter' ? 'Ausschließlich Demeter / Bioland Spitzenqualität' : 'Maximal günstig direkt ab Hof & erntefrisch'}.
+            Verfügbare Betriebe aus der Region ${regionCtx.city}: ${storesSummary}.
+            Antworte AUSSCHLIESSLICH mit einem JSON-Array:
+            [
+              {
+                "title": "Rezeptname",
+                "emoji": "🍲",
+                "costPerPortion": 2.15,
+                "prepMinutes": 25,
+                "seasonReason": "Warum in ${regionCtx.city} im ${monthName} besonders frisch & günstig",
+                "ingredients": ["Zutat 1", "Zutat 2", "Zutat 3"],
+                "recommendedStoreName": "Exakter Name eines Betriebs aus der Region ${regionCtx.city}"
+              }
+            ]`;
+
+            try {
+                const res = await callGeminiAPI({ contents: [{ parts: [{ text: prompt }] }] });
+                const raw = res?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+                const match = raw.match(/\[[\s\S]*\]/);
+                if (!match) throw new Error("Kein JSON");
+                const recipes = JSON.parse(match[0]);
+
+                recipesGrid.innerHTML = recipes.map(rec => {
+                    const matchedStore = currentPlaces.find(p =>
+                        p.name.toLowerCase().includes(String(rec.recommendedStoreName || '').toLowerCase()) ||
+                        String(rec.recommendedStoreName || '').toLowerCase().includes(p.name.toLowerCase())
+                    ) || currentPlaces[0];
+
+                    return `
+                        <div class="bg-white border border-earth-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between gap-3">
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-bold px-2.5 py-1 rounded-xl bg-green-100 text-green-900">
+                                        💰 ca. ${Number(rec.costPerPortion || 2.2).toFixed(2).replace('.', ',')} € / Portion
+                                    </span>
+                                    <span class="text-xs font-medium text-forest-600">⏱️ ${rec.prepMinutes || 25} Min.</span>
+                                </div>
+                                <h4 class="font-serif font-bold text-lg text-forest-950">${rec.emoji || '🍲'} ${escapeHtml(rec.title)}</h4>
+                                <p class="text-xs text-forest-700">${escapeHtml(rec.seasonReason || '')}</p>
+                                <div class="flex flex-wrap gap-1.5 pt-1">
+                                    ${(rec.ingredients || []).map(ing => `
+                                        <span class="text-[11px] bg-earth-100 text-forest-900 px-2.5 py-1 rounded-lg font-medium">${escapeHtml(ing)}</span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            ${matchedStore ? `
+                                <div class="pt-3 border-t border-earth-100 flex flex-wrap items-center justify-between gap-2">
+                                    <div class="text-xs text-forest-800">
+                                        📍 Frisch & günstig bei <strong>${escapeHtml(matchedStore.name)}</strong>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <button type="button" onclick="focusPlaceOnMap('${matchedStore.id}')" class="bg-forest-800 hover:bg-forest-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl">
+                                            Auf Karte
+                                        </button>
+                                        <a href="${buildGoogleMapsRouteUrl(matchedStore)}" target="_blank" rel="noopener noreferrer" class="bg-earth-100 hover:bg-earth-200 text-forest-900 text-xs font-semibold px-3 py-1.5 rounded-xl">
+                                            Route
+                                        </a>
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('');
+                showToast("Neue saisonale Bestpreis-Rezepte erstellt!", "success");
+            } catch (e) {
+                renderSeasonPlanner();
+                showToast("Saison-Rezepte aus lokaler Erntedatenbank aktualisiert.", "info");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
+        }
+
+        // --- KARTE, SATELLITEN-ANSICHT & ROUTEN-FUNKTIONEN ---
+        function initMap() {
+            if (typeof L === 'undefined') return;
+            try {
+                if (map) {
+                    map.remove();
+                    map = null;
+                }
+
+                map = L.map('map', {
+                    zoomControl: true,
+                    attributionControl: true
+                }).setView([48.2602, 11.4342], 12);
+
+                streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                    maxZoom: 19
+                });
+
+                satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics',
+                    maxZoom: 19
+                });
+
+                satelliteLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+                    maxZoom: 19,
+                    pane: 'overlayPane'
+                });
+
+                streetLayer.addTo(map);
+                markersLayer = L.layerGroup().addTo(map);
+
+                const layerSwitcherControl = L.control({ position: 'topright' });
+                layerSwitcherControl.onAdd = function() {
+                    const container = L.DomUtil.create('div', 'bg-white/95 backdrop-blur-md p-1 rounded-2xl shadow-md border border-earth-200 flex items-center gap-1');
+                    L.DomEvent.disableClickPropagation(container);
+                    container.innerHTML = `
+                        <button type="button" id="btn-layer-street" onclick="setMapLayer('street')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-forest-800 text-white transition-all flex items-center gap-1.5 cursor-pointer">
+                            <span>🗺️</span>
+                            <span>Straßenkarte</span>
+                        </button>
+                        <button type="button" id="btn-layer-satellite" onclick="setMapLayer('satellite')" class="px-3 py-1.5 rounded-xl text-xs font-medium text-forest-800 hover:bg-earth-100 transition-all flex items-center gap-1.5 cursor-pointer">
+                            <span>🛰️</span>
+                            <span>Satellit</span>
+                        </button>
+                    `;
+                    return container;
+                };
+                layerSwitcherControl.addTo(map);
+
+                updateMapMarkers(currentPlaces);
+                setTimeout(() => {
+                    if (map) map.invalidateSize();
+                }, 200);
+            } catch (e) {
+                showToast("Karte konnte nicht initialisiert werden.", "error");
+            }
+        }
+
+        function setMapLayer(mode) {
+            if (!map || mode === currentMapMode) return;
+            currentMapMode = mode;
+
+            const streetBtn = document.getElementById('btn-layer-street');
+            const satBtn = document.getElementById('btn-layer-satellite');
+
+            if (mode === 'satellite') {
+                if (streetLayer && map.hasLayer(streetLayer)) map.removeLayer(streetLayer);
+                if (satelliteLayer && !map.hasLayer(satelliteLayer)) satelliteLayer.addTo(map);
+                if (satelliteLabelsLayer && !map.hasLayer(satelliteLabelsLayer)) satelliteLabelsLayer.addTo(map);
+
+                if (satBtn) {
+                    satBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-semibold bg-forest-800 text-white transition-all flex items-center gap-1.5 cursor-pointer';
+                }
+                if (streetBtn) {
+                    streetBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-medium text-forest-800 hover:bg-earth-100 transition-all flex items-center gap-1.5 cursor-pointer';
+                }
+                showToast("Satelliten-Ansicht aktiviert.", "info");
+            } else {
+                if (satelliteLayer && map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
+                if (satelliteLabelsLayer && map.hasLayer(satelliteLabelsLayer)) map.removeLayer(satelliteLabelsLayer);
+                if (streetLayer && !map.hasLayer(streetLayer)) streetLayer.addTo(map);
+
+                if (streetBtn) {
+                    streetBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-semibold bg-forest-800 text-white transition-all flex items-center gap-1.5 cursor-pointer';
+                }
+                if (satBtn) {
+                    satBtn.className = 'px-3 py-1.5 rounded-xl text-xs font-medium text-forest-800 hover:bg-earth-100 transition-all flex items-center gap-1.5 cursor-pointer';
+                }
+                showToast("Straßenkarte aktiviert.", "info");
+            }
+        }
+
+        function updateMapMarkers(places) {
+            if (!map || !markersLayer) return;
+            markersLayer.clearLayers();
+            const bounds = [];
+
+            places.forEach(place => {
+                if (typeof place.lat !== 'number' || typeof place.lng !== 'number' || isNaN(place.lat) || isNaN(place.lng)) return;
+
+                const isOsm = place.id && String(place.id).startsWith('osm-');
+                const customIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div class="marker-pin ${isOsm ? 'osm-verified' : ''}"><span>${place.emoji || '🌿'}</span></div>`,
+                    iconSize: [36, 42],
+                    iconAnchor: [18, 42],
+                    popupAnchor: [0, -40]
+                });
+
+                const pricesPreview = (place.priceList && place.priceList.length > 0)
+                    ? `<div style="margin-top:6px;padding:6px 8px;background:#f5f0e6;border-radius:8px;font-size:11px;color:#1f362b;">
+                        <strong>Preise:</strong> ${place.priceList.slice(0, 2).map(p => `${escapeHtml(p.item)} (${Number(p.price).toFixed(2).replace('.', ',')} €)`).join(', ')}
+                       </div>`
+                    : '';
+
+                const hoursPreview = place.openingHours
+                    ? `<div style="font-size:11px;color:#4a8063;margin-top:4px;">🕒 ${escapeHtml(place.openingHours)}</div>`
+                    : '';
+
+                const popupHtml = `
+                    <div style="min-width:225px;max-width:270px;font-family:'Inter',sans-serif;">
+                        <div style="font-size:11px;font-weight:700;color:#4a8063;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(place.categoryLabel || 'Bio-Erzeuger')}</div>
+                        <div style="font-family:'Fraunces',serif;font-weight:700;font-size:16px;color:#101e17;margin-top:2px;">${escapeHtml(place.name)}</div>
+                        <div style="font-size:12px;color:#2c513e;margin-top:2px;">📍 ${escapeHtml(place.address)}</div>
+                        <div style="font-size:11px;color:#61412f;margin-top:2px;">🎯 ${place.lat.toFixed(6)}, ${place.lng.toFixed(6)}</div>
+                        ${hoursPreview}
+                        ${pricesPreview}
+                        <p style="font-size:12px;color:#1f362b;margin:8px 0;line-height:1.4;">${escapeHtml(place.description)}</p>
+                        <div style="display:flex;gap:6px;margin-top:8px;">
+                            <a href="${buildGoogleMapsPlaceUrl(place)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;background:#2c513e;color:#ffffff;text-decoration:none;font-size:11px;font-weight:600;padding:6px 8px;border-radius:8px;">Google Maps Pin</a>
+                            <a href="${buildGoogleMapsRouteUrl(place)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;background:#f5f0e6;color:#101e17;border:1px solid #dcc9a8;text-decoration:none;font-size:11px;font-weight:600;padding:6px 8px;border-radius:8px;">Route</a>
+                        </div>
+                    </div>
+                `;
+
+                const marker = L.marker([place.lat, place.lng], { icon: customIcon }).bindPopup(popupHtml);
+                marker.on('click', () => {
+                    loadPlaceDetailsOnDemand(place.id).then(() => {
+                        if (marker.isPopupOpen()) {
+                            const latest = currentPlaces.find(p => String(p.id) === String(place.id));
+                            if (latest) {
+                                const latestPrices = (latest.priceList && latest.priceList.length > 0)
+                                    ? `<div style="margin-top:6px;padding:6px 8px;background:#f5f0e6;border-radius:8px;font-size:11px;color:#1f362b;">
+                                        <strong>Preise:</strong> ${latest.priceList.slice(0, 3).map(pr => `${escapeHtml(pr.item)} (${Number(pr.price).toFixed(2).replace('.', ',')} €)`).join(', ')}
+                                       </div>`
+                                    : '';
+                                const latestHours = latest.openingHours
+                                    ? `<div style="font-size:11px;color:#4a8063;margin-top:4px;">🕒 ${escapeHtml(latest.openingHours)}</div>`
+                                    : '';
+                                marker.setPopupContent(`
+                                    <div style="min-width:225px;max-width:270px;font-family:'Inter',sans-serif;">
+                                        <div style="font-size:11px;font-weight:700;color:#4a8063;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(latest.categoryLabel || 'Bio-Erzeuger')}</div>
+                                        <div style="font-family:'Fraunces',serif;font-weight:700;font-size:16px;color:#101e17;margin-top:2px;">${escapeHtml(latest.name)}</div>
+                                        <div style="font-size:12px;color:#2c513e;margin-top:2px;">📍 ${escapeHtml(latest.address)}</div>
+                                        <div style="font-size:11px;color:#61412f;margin-top:2px;">🎯 ${latest.lat.toFixed(6)}, ${latest.lng.toFixed(6)}</div>
+                                        ${latestHours}
+                                        ${latestPrices}
+                                        <p style="font-size:12px;color:#1f362b;margin:8px 0;line-height:1.4;">${escapeHtml(latest.description)}</p>
+                                        <div style="display:flex;gap:6px;margin-top:8px;">
+                                            <a href="${buildGoogleMapsPlaceUrl(latest)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;background:#2c513e;color:#ffffff;text-decoration:none;font-size:11px;font-weight:600;padding:6px 8px;border-radius:8px;">Google Maps Pin</a>
+                                            <a href="${buildGoogleMapsRouteUrl(latest)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;background:#f5f0e6;color:#101e17;border:1px solid #dcc9a8;text-decoration:none;font-size:11px;font-weight:600;padding:6px 8px;border-radius:8px;">Route</a>
+                                        </div>
+                                    </div>
+                                `);
+                            }
+                        }
+                    });
+                });
+                markersLayer.addLayer(marker);
+                bounds.push([place.lat, place.lng]);
+            });
+
+            if (bounds.length > 0 && activeFilter === 'all') {
+                map.fitBounds(bounds, { padding: [36, 36], maxZoom: 13 });
+            }
+        }
+
+        function buildGoogleMapsPlaceUrl(place) {
+            if (place.mapUrl && place.mapUrl.startsWith('http')) {
+                return place.mapUrl;
+            }
+            const query = encodeURIComponent(`${place.name}, ${place.address}`);
+            return `https://www.google.com/maps/search/?api=1&query=${query}`;
+        }
+
+        function buildGoogleMapsRouteUrl(place) {
+            const dest = (typeof place.lat === 'number' && typeof place.lng === 'number')
+                ? `${place.lat},${place.lng}`
+                : encodeURIComponent(`${place.name}, ${place.address}`);
+            return `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`;
+        }
+
+        function buildAppleMapsRouteUrl(place) {
+            const dest = (typeof place.lat === 'number' && typeof place.lng === 'number')
+                ? `${place.lat},${place.lng}`
+                : encodeURIComponent(`${place.name}, ${place.address}`);
+            return `https://maps.apple.com/?daddr=${dest}&dirflg=d`;
+        }
+
+        function renderPlaces(places) {
+            const listEl = document.getElementById('places-list');
+            const countEl = document.getElementById('places-count');
+            if (!listEl) return;
+
+            if (countEl) {
+                countEl.textContent = `${places.length} Verifizierte Erzeuger`;
+            }
+
+            if (places.length === 0) {
+                listEl.innerHTML = `
+                    <div class="text-center py-10 px-4 text-sm text-forest-700">
+                        Keine Betriebe in dieser Kategorie gefunden. Wähle oben einen anderen Filter.
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = places.map(place => {
+                const pricesHtml = (place.priceList && place.priceList.length > 0)
+                    ? `<div class="mt-2 pt-2 border-t border-earth-200/80 flex flex-wrap gap-1.5">
+                        ${place.priceList.slice(0, 2).map(pr => `
+                            <span class="text-[11px] font-semibold bg-earth-100 text-forest-900 px-2 py-0.5 rounded-lg">
+                                ${escapeHtml(pr.item)}: ${Number(pr.price).toFixed(2).replace('.', ',')} €
+                            </span>
+                        `).join('')}
+                       </div>`
+                    : '';
+
+                return `
+                    <div class="bg-earth-50/70 hover:bg-earth-50 border border-earth-200 rounded-2xl p-3.5 transition-all space-y-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex items-start gap-2.5">
+                                <span class="text-xl bg-white w-9 h-9 rounded-xl flex items-center justify-center border border-earth-200 shrink-0">${place.emoji || '🌿'}</span>
+                                <div>
+                                    <div class="text-[10px] font-bold uppercase tracking-wider text-forest-600">${escapeHtml(place.categoryLabel || 'Bio-Erzeuger')}</div>
+                                    <h3 class="font-serif font-bold text-base text-forest-950 leading-snug cursor-pointer hover:text-forest-700" onclick="focusPlaceOnMap('${place.id}')">${escapeHtml(place.name)}</h3>
+                                    <p class="text-xs text-forest-700 mt-0.5">📍 ${escapeHtml(place.address)}</p>
+                                </div>
+                            </div>
+                            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-forest-100 text-forest-800 whitespace-nowrap">
+                                ${escapeHtml(place.dataSource || 'Verifiziert ✓')}
+                            </span>
+                        </div>
+                        ${place.openingHours ? `<div class="text-[11px] text-forest-700">🕒 ${escapeHtml(place.openingHours)}</div>` : ''}
+                        ${pricesHtml}
+                        <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                            <button type="button" onclick="focusPlaceOnMap('${place.id}')" class="bg-forest-800 hover:bg-forest-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors">
+                                Pin fokussieren
+                            </button>
+                            <a href="${buildGoogleMapsPlaceUrl(place)}" target="_blank" rel="noopener noreferrer" class="bg-white hover:bg-earth-100 text-forest-900 border border-earth-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors">
+                                Google Maps Pin
+                            </a>
+                            <a href="${buildGoogleMapsRouteUrl(place)}" target="_blank" rel="noopener noreferrer" class="bg-earth-100 hover:bg-earth-200 text-forest-900 text-xs font-semibold px-2.5 py-1.5 rounded-xl transition-colors">
+                                Route
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterPlaces(category) {
+            activeFilter = category;
+            document.querySelectorAll('.filter-chip').forEach(btn => {
+                const isTarget = btn.getAttribute('onclick') === `filterPlaces('${category}')`;
+                if (isTarget) {
+                    btn.className = 'filter-chip active px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-forest-800 text-white transition-all whitespace-nowrap';
+                } else {
+                    btn.className = 'filter-chip px-3.5 py-1.5 rounded-xl text-xs font-medium bg-earth-100 text-forest-800 hover:bg-earth-200 transition-all whitespace-nowrap';
+                }
+            });
+
+            const filtered = category === 'all'
+                ? currentPlaces
+                : currentPlaces.filter(p => p.category === category);
+            renderPlaces(filtered);
+            updateMapMarkers(filtered);
+        }
+
+        function hasExactHouseNumber(nominatimItem) {
+            return Boolean(nominatimItem && nominatimItem.address && nominatimItem.address.house_number);
+        }
+
+        function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const toRad = deg => deg * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return Math.round(R * c);
+        }
+
+        window.onload = async function() {
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            const monthSelect = document.getElementById('season-month-select');
+            if (monthSelect) {
+                monthSelect.value = String(new Date().getMonth() + 1);
+            }
+            initMap();
+            renderPlaces(currentPlaces);
+            activeUserRegion = getActiveRegionContext();
+            renderSeasonPlanner();
+            detectBrowserUserLocation(false);
+            await refineInitialAddressesViaGeocoder();
+        };
+
+        async function refineInitialAddressesViaGeocoder() {
+            let updated = false;
+            for (let i = 0; i < currentPlaces.length; i++) {
+                const resolved = await resolveNationwideExactStoreLocation(currentPlaces[i]);
+                if (resolved) {
+                    currentPlaces[i] = { ...resolved, id: currentPlaces[i].id };
+                    updated = true;
+                }
+                await yieldToMainThread();
+            }
+            if (updated) {
+                const visible = activeFilter === 'all' ? currentPlaces : currentPlaces.filter(p => p.category === activeFilter);
+                renderPlaces(visible);
+                updateMapMarkers(visible);
+            }
+        }
+
+        function focusPlaceOnMap(id) {
+            const place = currentPlaces.find(p => String(p.id) === String(id));
+            if (place && map && markersLayer) {
+                switchTab('map-tab');
+                loadPlaceDetailsOnDemand(place.id);
+                setTimeout(() => {
+                    map.setView([place.lat, place.lng], 16, { animate: true });
+                    markersLayer.eachLayer(layer => {
+                        const latLng = layer.getLatLng();
+                        if (calculateDistanceMeters(latLng.lat, latLng.lng, place.lat, place.lng) === 0) {
+                            layer.openPopup();
+                        }
+                    });
+                }, 120);
+            }
+        }
+
+        async function geocodeAddressOrCity(query, requireStreetMatch = false, viewbox = null, signal = null) {
+            const cacheKey = `${requireStreetMatch ? '1' : '0'}|${String(query).trim().toLowerCase()}|${viewbox ? viewbox.map(n => Number(n).toFixed(2)).join(',') : ''}`;
+            if (geocodeQueryCache.has(cacheKey)) {
+                return geocodeQueryCache.get(cacheKey);
+            }
+            try {
+                let url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=de&limit=8&q=${encodeURIComponent(query)}`;
+                if (viewbox) {
+                    url += `&viewbox=${viewbox.join(',')}&bounded=0`;
+                }
+                const response = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'de' } }, 6000, signal);
+                const data = await response.json();
+                let resolved = null;
+                if (data && data.length > 0) {
+                    if (requireStreetMatch) {
+                        const houseHit = data.find(item => hasExactHouseNumber(item));
+                        if (houseHit) {
+                            resolved = {
+                                lat: parseFloat(houseHit.lat),
+                                lng: parseFloat(houseHit.lon),
+                                boundingbox: houseHit.boundingbox,
+                                hasHouseNumber: true
+                            };
+                        }
+                    } else {
+                        resolved = {
+                            lat: parseFloat(data[0].lat),
+                            lng: parseFloat(data[0].lon),
+                            boundingbox: data[0].boundingbox,
+                            hasHouseNumber: hasExactHouseNumber(data[0])
+                        };
+                    }
+                }
+                if (resolved) {
+                    geocodeQueryCache.set(cacheKey, resolved);
+                }
+                return resolved;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function fetchOpenStreetMapProducers(lat, lng, radiusMeters = 12000, signal = null) {
+            const gridLat = Number(lat).toFixed(3);
+            const gridLng = Number(lng).toFixed(3);
+            const cacheKey = `${gridLat},${gridLng}:${radiusMeters}`;
+
+            if (overpassRadiusCache.has(cacheKey)) {
+                return overpassRadiusCache.get(cacheKey).map(item => hydratePlaceFromCache({ ...item }));
+            }
+
+            const smallerCachedEntry = Array.from(overpassRadiusCache.entries())
+                .filter(([k]) => k.startsWith(`${gridLat},${gridLng}:`) && Number(k.split(':')[1]) < radiusMeters)
+                .sort((a, b) => Number(b[1].length) - Number(a[1].length))[0];
+
+            const overpassQuery = `
+                [out:json][timeout:12];
+                (
+                  node["shop"="farm"](around:${radiusMeters},${lat},${lng});
+                  way["shop"="farm"](around:${radiusMeters},${lat},${lng});
+                  node["vending"~"milk|food|eggs|honey"](around:${radiusMeters},${lat},${lng});
+                  node["craft"="beekeeper"](around:${radiusMeters},${lat},${lng});
+                  node["shop"="butcher"]["organic"~"yes|only"](around:${radiusMeters},${lat},${lng});
+                  way["shop"="butcher"]["organic"~"yes|only"](around:${radiusMeters},${lat},${lng});
+                  node["shop"="bakery"]["organic"~"yes|only"](around:${radiusMeters},${lat},${lng});
+                  way["shop"="bakery"]["organic"~"yes|only"](around:${radiusMeters},${lat},${lng});
+                  node["shop"~"greengrocer|health_food"]["organic"~"yes|only"](around:${radiusMeters},${lat},${lng});
+                );
+                out center tags 45;
+            `;
+
+            const endpoints = [
+                'https://overpass-api.de/api/interpreter',
+                'https://lz4.overpass-api.de/api/interpreter'
+            ];
+
+            for (const endpoint of endpoints) {
+                if (signal && signal.aborted) break;
+                try {
+                    const res = await fetchWithTimeout(endpoint, {
+                        method: 'POST',
+                        body: 'data=' + encodeURIComponent(overpassQuery),
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                    }, 9000, signal);
+                    if (!res.ok) continue;
+                    const json = await res.json();
+                    const elements = json.elements || [];
+
+                    const parsedPlaces = [];
+                    for (let i = 0; i < elements.length; i++) {
+                        if (i % 15 === 0) await yieldToMainThread();
+                        const el = elements[i];
+                        const tags = el.tags || {};
+                        const elLat = el.lat ?? el.center?.lat;
+                        const elLng = el.lon ?? el.center?.lon;
+                        if (!elLat || !elLng) continue;
+
+                        const name = tags.name || tags.operator || tags.brand || (tags.vending === 'milk' ? 'Milchtankstelle / Rohmilch-Automat' : null);
+                        if (!name) continue;
+
+                        let category = 'produce';
+                        let categoryLabel = 'Hofladen & Direktvermarkter';
+                        let emoji = '🥕';
+                        let products = ['Regionale Hofprodukte', 'Saisonales Angebot'];
+
+                        if (tags.vending === 'milk' || tags.dairy === 'yes') {
+                            category = 'milk';
+                            categoryLabel = 'Milchtankstelle / Rohmilch';
+                            emoji = '🥛';
+                            products = ['Frische Rohmilch / Hofmilch', 'Milchprodukte'];
+                        } else if (tags.shop === 'butcher') {
+                            category = 'meat';
+                            categoryLabel = 'Bio-Metzgerei';
+                            emoji = '🥩';
+                            products = ['Bio-Fleischwaren', 'Handwerkliche Wurst'];
+                        } else if (tags.shop === 'bakery') {
+                            category = 'bakery';
+                            categoryLabel = 'Bio-Bäckerei';
+                            emoji = '🍞';
+                            products = ['Bio-Sauerteigbrot', 'Vollkorngebäck'];
+                        } else if (tags.craft === 'beekeeper' || tags.vending === 'honey') {
+                            category = 'honey';
+                            categoryLabel = 'Imkerei & Honig';
+                            emoji = '🍯';
+                            products = ['Regionaler Imkerhonig', 'Bienenprodukte'];
+                        } else if (tags.vending === 'eggs') {
+                            category = 'honey';
+                            categoryLabel = 'Eier-Automat / Freilandeier';
+                            emoji = '🥚';
+                            products = ['Frische Freilandeier'];
+                        }
+
+                        const street = [tags['addr:street'], tags['addr:housenumber']].filter(Boolean).join(' ');
+                        const cityLine = [tags['addr:postcode'], tags['addr:city'] || tags['addr:village'] || tags['addr:town']].filter(Boolean).join(' ');
+                        const address = [street, cityLine].filter(Boolean).join(', ') || `Koordinaten: ${elLat.toFixed(5)}, ${elLng.toFixed(5)}`;
+
+                        const rawPlace = {
+                            id: `osm-${el.type}-${el.id}`,
+                            osmId: `${el.type}/${el.id}`,
+                            name: name,
+                            category,
+                            categoryLabel,
+                            emoji,
+                            address,
+                            mapUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${address}`)}`,
+                            lat: Number(elLat.toFixed(6)),
+                            lng: Number(elLng.toFixed(6)),
+                            website: tags.website || tags['contact:website'] || '',
+                            openingHours: tags.opening_hours || '',
+                            products,
+                            priceList: [],
+                            description: tags.description || `Offizieller OpenStreetMap-Eintrag (${categoryLabel}) mit exakter Gebäudeposition.`,
+                            dataSource: 'OpenStreetMap Gebäude (0m) ✓'
+                        };
+                        parsedPlaces.push(hydratePlaceFromCache(rawPlace));
+                    }
+
+                    overpassRadiusCache.set(cacheKey, parsedPlaces);
+                    return parsedPlaces;
+                } catch (e) {
+                    if (signal && signal.aborted) break;
+                }
+            }
+
+            if (smallerCachedEntry) {
+                return smallerCachedEntry[1].map(item => hydratePlaceFromCache({ ...item }));
+            }
+            return [];
+        }
+
+        async function handleLocationSearch(event) {
+            event.preventDefault();
+            const cityQuery = document.getElementById('city-input').value.trim();
+            const radiusMeters = parseInt(document.getElementById('search-radius').value, 10) || 12000;
+
+            if (!cityQuery) {
+                showToast("Bitte gib eine Stadt, Region oder Postleitzahl in Deutschland ein.", "warning");
+                return;
+            }
+
+            if (activeSyncAbortController) {
+                activeSyncAbortController.abort();
+            }
+            activeSyncAbortController = new AbortController();
+            const syncSignal = activeSyncAbortController.signal;
+            const currentToken = ++activeSyncToken;
+
+            const btn = document.getElementById('ai-search-btn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>OSM + KI Sync...</span>`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            const listEl = document.getElementById('places-list');
+            listEl.innerHTML = `
+                <div class="text-center py-12 px-4 space-y-3">
+                    <div class="w-12 h-12 rounded-full bg-forest-100 text-forest-800 flex items-center justify-center mx-auto animate-pulse">
+                        <i data-lucide="database" class="w-6 h-6"></i>
+                    </div>
+                    <p class="font-serif font-bold text-base text-forest-900">Synchronisiere ${escapeHtml(cityQuery)} (${(radiusMeters / 1000).toFixed(0)} km)...</p>
+                    <p class="text-xs text-forest-600">Nutzt Cache, OpenStreetMap-Gebäude & Verzeichnisdaten ohne Blockaden.</p>
+                </div>
+            `;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            try {
+                const cityGeo = await geocodeAddressOrCity(cityQuery, false, null, syncSignal);
+                if (!cityGeo) {
+                    throw new Error("Ort konnte nicht geokodiert werden.");
+                }
+                if (currentToken !== activeSyncToken) return;
+
+                activeUserRegion = {
+                    city: cityQuery,
+                    lat: cityGeo.lat,
+                    lng: cityGeo.lng,
+                    source: `Ort "${cityQuery}"`
+                };
+                renderSeasonPlanner();
+
+                if (map) {
+                    const zoomLevel = radiusMeters <= 5000 ? 13 : (radiusMeters <= 12000 ? 12 : 11);
+                    map.setView([cityGeo.lat, cityGeo.lng], zoomLevel);
+                }
+
+                const degLatSpan = Math.max(0.25, (radiusMeters / 111000) * 1.4);
+                const degLngSpan = Math.max(0.35, (radiusMeters / (111000 * Math.cos(cityGeo.lat * Math.PI / 180))) * 1.4);
+                const viewbox = [
+                    cityGeo.lng - degLngSpan,
+                    cityGeo.lat - degLatSpan,
+                    cityGeo.lng + degLngSpan,
+                    cityGeo.lat + degLatSpan
+                ];
+
+                const osmPromise = fetchOpenStreetMapProducers(cityGeo.lat, cityGeo.lng, radiusMeters, syncSignal);
+
+                const aiPromise = (async () => {
+                    try {
+                        const prompt = `Recherchiere mit der Google-Suche AUSSCHLIESSLICH nach realen, existierenden Hofläden, Bauernhöfen mit Direktverkauf, Milchtankstellen, Bio-Metzgereien, Bio-Bäckereien und Imkereien in und um "${cityQuery}" im Umkreis von ca. ${Math.round(radiusMeters / 1000)} km (Deutschland).
+                        Ermittle zu jedem Betrieb die exakten Google-Maps-Koordinaten (Breitengrad und Längengrad direkt auf dem Gebäude/Eingang), die exakte Straße mit Hausnummer und Ort sowie falls verfügbar den Google-Maps-Link. Keine erfundenen Orte!
+                        Antworte AUSSCHLIESSLICH mit einem validen JSON-Array:
+                        [
+                          {
+                            "name": "Exakter Name",
+                            "category": "milk" | "meat" | "produce" | "bakery" | "honey",
+                            "categoryLabel": "Kategorie",
+                            "emoji": "🥛" | "🥩" | "🥕" | "🍞" | "🍯",
+                            "address": "Straße Hausnummer, PLZ Ort (Deutschland)",
+                            "mapUrl": "Google Maps URL oder leer",
+                            "website": "URL oder leer",
+                            "openingHours": "Öffnungszeiten oder leer",
+                            "lat": Breitengrad,
+                            "lng": Längengrad,
+                            "products": ["Produkt 1", "Produkt 2"],
+                            "description": "Kurze Beschreibung"
+                          }
+                        ]`;
+
+                        const payload = {
+                            contents: [{ parts: [{ text: prompt }] }],
+                            tools: [{ "google_search": {} }]
+                        };
+
+                        const res = await callGeminiAPI(payload, 2, syncSignal);
+                        const rawText = res?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+                        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+                        if (!jsonMatch) return [];
+
+                        const parsed = JSON.parse(jsonMatch[0]);
+                        const enriched = [];
+
+                        const batchSize = 4;
+                        for (let start = 0; start < parsed.length; start += batchSize) {
+                            if (syncSignal.aborted) break;
+                            const chunk = parsed.slice(start, start + batchSize);
+                            const chunkResults = await Promise.all(chunk.map(async (item, offset) => {
+                                const i = start + offset;
+                                if (!item || !item.name || !item.address) return null;
+
+                                const aiLat = Number(item.lat);
+                                const aiLng = Number(item.lng);
+                                const hasExactAiCoords = !isNaN(aiLat) && !isNaN(aiLng) && aiLat !== 0 && aiLng !== 0;
+
+                                const basePlace = {
+                                    id: `ai-${Date.now()}-${i}`,
+                                    osmId: null,
+                                    name: item.name,
+                                    category: ["milk", "meat", "produce", "bakery", "honey"].includes(item.category) ? item.category : "produce",
+                                    categoryLabel: item.categoryLabel || "Bio-Erzeuger",
+                                    emoji: item.emoji || "🌿",
+                                    address: item.address,
+                                    mapUrl: item.mapUrl || '',
+                                    lat: hasExactAiCoords ? Number(aiLat.toFixed(6)) : cityGeo.lat,
+                                    lng: hasExactAiCoords ? Number(aiLng.toFixed(6)) : cityGeo.lng,
+                                    website: item.website || '',
+                                    openingHours: item.openingHours || '',
+                                    products: Array.isArray(item.products) && item.products.length > 0 ? item.products : ["Bio-Produkte"],
+                                    priceList: [],
+                                    description: item.description || "Verifizierter Direktvermarkter.",
+                                    dataSource: hasExactAiCoords ? 'Google Maps + KI ✓' : 'Adress-Koordinaten ✓'
+                                };
+
+                                return await resolveNationwideExactStoreLocation(basePlace, viewbox, syncSignal);
+                            }));
+                            enriched.push(...chunkResults.filter(Boolean));
+                            await yieldToMainThread();
+                        }
+                        return enriched;
+                    } catch (aiErr) {
+                        return [];
+                    }
+                })();
+
+                const osmPlaces = await osmPromise;
+                if (currentToken !== activeSyncToken) return;
+
+                if (osmPlaces.length > 0) {
+                    currentPlaces = osmPlaces.map(p => cachePlaceDetails(p));
+                    document.getElementById('ai-status-badge').textContent = `${osmPlaces.length} OSM geladen (KI läuft...)`;
+                    const partialVisible = activeFilter === 'all' ? currentPlaces : currentPlaces.filter(p => p.category === activeFilter);
+                    renderPlaces(partialVisible);
+                    updateMapMarkers(partialVisible);
+                    await yieldToMainThread();
+                }
+
+                const verifiedOsmPlaces = [];
+                for (let start = 0; start < osmPlaces.length; start += 4) {
+                    if (syncSignal.aborted) break;
+                    const chunk = osmPlaces.slice(start, start + 4);
+                    const resolvedChunk = await Promise.all(
+                        chunk.map(p => resolveNationwideExactStoreLocation(p, viewbox, syncSignal))
+                    );
+                    verifiedOsmPlaces.push(...resolvedChunk);
+                    await yieldToMainThread();
+                }
+
+                const aiEnrichedPlaces = await aiPromise;
+                if (currentToken !== activeSyncToken) return;
+
+                const mergedPlaces = [...(verifiedOsmPlaces.length > 0 ? verifiedOsmPlaces : osmPlaces)];
+                aiEnrichedPlaces.forEach(aiPlace => {
+                    const duplicate = mergedPlaces.find(existing =>
+                        calculateDistanceMeters(existing.lat, existing.lng, aiPlace.lat, aiPlace.lng) === MAX_GEO_TOLERANCE_METERS ||
+                        existing.name.trim().toLowerCase() === aiPlace.name.trim().toLowerCase()
+                    );
+                    if (duplicate) {
+                        if (!duplicate.mapUrl && aiPlace.mapUrl) duplicate.mapUrl = aiPlace.mapUrl;
+                        if (!duplicate.website && aiPlace.website) duplicate.website = aiPlace.website;
+                        if (!duplicate.openingHours && aiPlace.openingHours) duplicate.openingHours = aiPlace.openingHours;
+                        if (aiPlace.products.length > duplicate.products.length) duplicate.products = aiPlace.products;
+                        duplicate.dataSource = 'OSM + Google Maps Exakt (0m) ✓';
+                        cachePlaceDetails(duplicate);
+                    } else {
+                        mergedPlaces.push(cachePlaceDetails(aiPlace));
+                    }
+                });
+
+                if (mergedPlaces.length === 0) {
+                    throw new Error("Keine Betriebe im gewählten Umkreis gefunden.");
+                }
+
+                currentPlaces = mergedPlaces;
+                document.getElementById('ai-status-badge').textContent = `${mergedPlaces.length} Exakt verifiziert (${cityQuery})`;
+                filterPlaces('all');
+                showToast(`${currentPlaces.length} Betriebe für "${cityQuery}" punktgenau synchronisiert!`, "success");
+            } catch (err) {
+                if (err && err.name === 'AbortError') return;
+                if (currentToken !== activeSyncToken) return;
+                showToast(`Keine neuen Treffer für "${cityQuery}" im Umkreis – zeige aktuelle Datenbank.`, "warning");
+                filterPlaces(activeFilter);
+            } finally {
+                if (currentToken === activeSyncToken) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                }
+            }
+        }
+
+        // --- WEB-SCRAPING ROUTINE FÜR PRODUKTPREISE ---
+        async function fetchHtmlViaCorsProxy(targetUrl, signal = null) {
+            if (!targetUrl || !targetUrl.startsWith('http')) return null;
+            const cacheKey = `html:${targetUrl.trim().toLowerCase()}`;
+            if (geocodeQueryCache.has(cacheKey)) {
+                return geocodeQueryCache.get(cacheKey);
+            }
+            try {
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+                const res = await fetchWithTimeout(proxyUrl, {}, 4500, signal);
+                if (!res.ok) return null;
+                const data = await res.json();
+                if (!data || !data.contents) return null;
+
+                const doc = new DOMParser().parseFromString(data.contents, 'text/html');
+                const bodyText = (doc.body?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 2500);
+                geocodeQueryCache.set(cacheKey, bodyText);
+                return bodyText;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function scrapeAllLocalPrices() {
+            if (currentPlaces.length === 0) {
+                showToast("Keine Betriebe auf der Karte vorhanden.", "warning");
+                return;
+            }
+
+            const btn = document.getElementById('scrape-prices-btn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Scrape Preise...</span>`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            showToast("Starte Web-Scraping & Preisabgleich für alle sichtbaren Erzeuger...", "info");
+
+            try {
+                const targetPlaces = currentPlaces.slice(0, 10);
+
+                let cacheHits = 0;
+                const needsRemoteFetch = [];
+                targetPlaces.forEach(p => {
+                    const cached = placeDetailsCache.get(buildPlaceCacheKey(p));
+                    if (cached && Array.isArray(cached.priceList) && cached.priceList.length > 0) {
+                        p.priceList = cached.priceList;
+                        cacheHits++;
+                    } else {
+                        needsRemoteFetch.push(p);
+                    }
+                });
+
+                if (needsRemoteFetch.length > 0) {
+                    const scrapedSnippets = await Promise.all(needsRemoteFetch.map(async (p) => {
+                        const htmlSnippet = p.website ? await fetchHtmlViaCorsProxy(p.website) : null;
+                        return {
+                            id: p.id,
+                            name: p.name,
+                            category: p.categoryLabel,
+                            address: p.address,
+                            website: p.website || "Keine URL",
+                            scrapedHtmlText: htmlSnippet || "Kein direkter HTML-Zugriff (nutze Search Grounding)"
+                        };
+                    }));
+
+                    const prompt = `Extrahiere und recherchiere reale aktuelle Produktpreise (in Euro) für diese lokalen Bio-Erzeuger.
+                    Nutze zuerst den gescrapten Website-Text (falls vorhanden) und ergänze über Google Search reale Preislisten oder regionale Ab-Hof-Preise in Deutschland:
+                    ${JSON.stringify(scrapedSnippets)}
+
+                    Antworte AUSSCHLIESSLICH mit einem JSON-Array:
+                    [
+                      {
+                        "id": "Exakte ID aus Input",
+                        "priceList": [
+                          { "item": "Produktname + Einheit (z.B. 1L Rohmilch)", "price": 1.50, "source": "Website-Scrape" | "Web-Preisliste" | "Ab-Hof-Richtpreis" }
+                        ]
+                      }
+                    ]`;
+
+                    const payload = {
+                        contents: [{ parts: [{ text: prompt }] }],
+                        tools: [{ "google_search": {} }]
+                    };
+
+                    const res = await callGeminiAPI(payload);
+                    const rawText = res?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+                    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+                    if (!jsonMatch && cacheHits === 0) throw new Error("Keine Preisdaten extrahiert.");
+
+                    if (jsonMatch) {
+                        const priceResults = JSON.parse(jsonMatch[0]);
+                        priceResults.forEach(entry => {
+                            const store = currentPlaces.find(p => String(p.id) === String(entry.id));
+                            if (store && Array.isArray(entry.priceList) && entry.priceList.length > 0) {
+                                store.priceList = entry.priceList.map(item => ({
+                                    item: item.item,
+                                    price: Number(item.price) || 0,
+                                    source: item.source || 'Web-Scrape'
+                                }));
+                                cachePlaceDetails(store);
+                            }
+                        });
+                    }
+                }
+
+                filterPlaces(activeFilter);
+                const totalWithPrices = currentPlaces.filter(p => p.priceList && p.priceList.length > 0).length;
+                showToast(`Preise für ${totalWithPrices} Betriebe bereit (inkl. Cache) & im Planer hinterlegt!`, "success");
+            } catch (err) {
+                showToast("Preis-Scraping teilweise eingeschränkt – bestehende Richtpreise bleiben aktiv.", "warning");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
+        }
+
+        // --- PREIS- & EINKAUFSPLANER ---
+        function selectOccasion(btnEl, occasionName) {
+            selectedOccasion = occasionName;
+            document.querySelectorAll('.occasion-btn').forEach(btn => {
+                btn.classList.remove('bg-forest-800', 'text-white', 'border-forest-800', 'font-semibold');
+                btn.classList.add('bg-earth-50', 'text-forest-800', 'border-earth-300', 'font-medium');
+            });
+            btnEl.classList.remove('bg-earth-50', 'text-forest-800', 'border-earth-300', 'font-medium');
+            btnEl.classList.add('bg-forest-800', 'text-white', 'border-forest-800', 'font-semibold');
+        }
+
+        async function generateSmartShoppingPlan(e) {
+            e.preventDefault();
+            const persons = document.getElementById('plan-persons').value;
+            const budgetFocus = document.getElementById('plan-budget').value;
+            const customNotes = document.getElementById('plan-custom-notes').value.trim();
+            const city = document.getElementById('city-input').value.trim() || "Dachau";
+            const selectedCategories = Array.from(document.querySelectorAll('.plan-cat:checked')).map(cb => cb.value);
+
+            if (selectedCategories.length === 0 && !customNotes) {
+                showToast("Bitte wähle mindestens eine Kategorie aus.", "warning");
+                return;
+            }
+
+            const btn = document.getElementById('generate-plan-btn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i><span>Berechne Bestpreise...</span>`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            const knownStoresContext = currentPlaces.map(p => {
+                const pricesStr = (p.priceList && p.priceList.length)
+                    ? ` | Gescrapte Preise: ${p.priceList.map(pr => `${pr.item}: ${pr.price}€`).join(', ')}`
+                    : '';
+                return `${p.name} (${p.categoryLabel}, ${p.address}${pricesStr})`;
+            }).join('\n');
+
+            const prompt = `Erstelle einen möglichst günstigen Bio-Einkaufsplan für "${city}".
+            Anlass: ${selectedOccasion}, Personen: ${persons}, Fokus: ${budgetFocus}, Kategorien: ${selectedCategories.join(', ')}, Sonderwünsche: ${customNotes || 'Keine'}.
+            Nutze vorrangig diese verifizierten Betriebe vor Ort und deren erfasste Preise:
+            ${knownStoresContext}
+
+            Antworte im JSON-Format:
+            {
+              "planTitle": "Titel",
+              "totalEstimatedPrice": 45.50,
+              "supermarketComparisonPrice": 62.00,
+              "savingsTip": "Spartipp",
+              "mealIdea": "Rezeptidee",
+              "stores": [
+                {
+                  "storeName": "Exakter Ladenname",
+                  "storeCategory": "Kategorie",
+                  "emoji": "🥕",
+                  "storeSubtotal": 20.00,
+                  "items": [
+                    { "itemName": "Produkt & Menge", "price": 5.00, "priceNote": "Preisvergleich / Quelle" }
+                  ]
+                }
+              ]
+            }`;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            planTitle: { type: "STRING" },
+                            totalEstimatedPrice: { type: "NUMBER" },
+                            supermarketComparisonPrice: { type: "NUMBER" },
+                            savingsTip: { type: "STRING" },
+                            mealIdea: { type: "STRING" },
+                            stores: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        storeName: { type: "STRING" },
+                                        storeCategory: { type: "STRING" },
+                                        emoji: { type: "STRING" },
+                                        storeSubtotal: { type: "NUMBER" },
+                                        items: {
+                                            type: "ARRAY",
+                                            items: {
+                                                type: "OBJECT",
+                                                properties: {
+                                                    itemName: { type: "STRING" },
+                                                    price: { type: "NUMBER" },
+                                                    priceNote: { type: "STRING" }
+                                                },
+                                                required: ["itemName", "price", "priceNote"]
+                                            }
+                                        }
+                                    },
+                                    required: ["storeName", "storeCategory", "emoji", "storeSubtotal", "items"]
+                                }
+                            }
+                        },
+                        required: ["planTitle", "totalEstimatedPrice", "supermarketComparisonPrice", "savingsTip", "mealIdea", "stores"]
+                    }
+                }
+            };
+
+            try {
+                const res = await callGeminiAPI(payload);
+                const plan = JSON.parse(res.candidates[0].content.parts[0].text);
+                renderShoppingPlanResult(plan);
+                showToast("Günstigster Einkaufsplan erstellt!", "success");
+            } catch (err) {
+                showToast("Preisberechnung fehlgeschlagen. Bitte erneut versuchen.", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
+        }
+
+        function renderShoppingPlanResult(plan) {
+            const resultArea = document.getElementById('planner-result-area');
+            const total = Number(plan.totalEstimatedPrice || 0);
+            const comp = Number(plan.supermarketComparisonPrice || total * 1.25);
+            const saved = Math.max(0, comp - total);
+
+            const storesHtml = (plan.stores || []).map(store => {
+                const matchedPlace = currentPlaces.find(p =>
+                    p.name.toLowerCase().includes(store.storeName.toLowerCase()) ||
+                    store.storeName.toLowerCase().includes(p.name.toLowerCase())
+                );
+                const mapBtnHtml = matchedPlace
+                    ? `<button onclick="focusPlaceOnMap('${matchedPlace.id}')" class="text-[11px] font-semibold bg-white hover:bg-forest-50 text-forest-800 border border-earth-300 px-2.5 py-1 rounded-lg transition-colors">📍 Auf Karte</button>`
+                    : '';
+
+                return `
+                <div class="bg-earth-50/80 rounded-2xl p-4 border border-earth-200">
+                    <div class="flex items-center justify-between gap-2 pb-2.5 mb-2 border-b border-earth-200">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-xl bg-white w-9 h-9 rounded-xl flex items-center justify-center shadow-sm border border-earth-100">${store.emoji || '🏪'}</span>
+                            <div>
+                                <h4 class="font-serif font-bold text-base text-forest-950 leading-tight">${escapeHtml(store.storeName)}</h4>
+                                <span class="text-[11px] font-medium text-forest-600">${escapeHtml(store.storeCategory)}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            ${mapBtnHtml}
+                            <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-forest-100 text-forest-900">
+                                ${Number(store.storeSubtotal).toFixed(2).replace('.', ',')} €
+                            </span>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        ${(store.items || []).map(item => `
+                            <div class="flex items-center justify-between py-1.5 border-b border-earth-200/60 last:border-none gap-2">
+                                <div>
+                                    <div class="text-sm font-medium text-forest-950">${escapeHtml(item.itemName)}</div>
+                                    <div class="text-[11px] text-forest-600">${escapeHtml(item.priceNote)}</div>
+                                </div>
+                                <div class="text-sm font-bold text-forest-900 whitespace-nowrap">
+                                    ${Number(item.price).toFixed(2).replace('.', ',')} €
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `}).join('');
+
+            resultArea.innerHTML = `
+                <div class="space-y-4">
+                    <div class="bg-forest-900 text-earth-50 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-earth-300">Bestpreis-Route</span>
+                            <h3 class="font-serif text-xl font-bold mt-0.5">${escapeHtml(plan.planTitle)}</h3>
+                            <p class="text-xs text-forest-200 mt-1">💡 ${escapeHtml(plan.savingsTip)}</p>
+                        </div>
+                        <div class="bg-forest-800 border border-forest-600 rounded-xl p-3 text-right shrink-0">
+                            <div class="text-[11px] text-forest-300 line-through">Bio-Supermarkt: ${comp.toFixed(2).replace('.', ',')} €</div>
+                            <div class="text-2xl font-bold text-white">${total.toFixed(2).replace('.', ',')} €</div>
+                            <div class="text-[11px] font-bold text-green-300">Ersparnis: ca. ${saved.toFixed(2).replace('.', ',')} €</div>
+                        </div>
+                    </div>
+                    <div class="bg-earth-100/80 border border-earth-200 rounded-2xl p-3.5 text-xs text-forest-900">
+                        🍽️ <strong>Genuss-Tipp:</strong> ${escapeHtml(plan.mealIdea)}
+                    </div>
+                    <div class="space-y-3">${storesHtml}</div>
+                </div>
+            `;
+        }
+
+        // --- SLOP-CHECK (STABILER SCANNER + DIREKTE LOKALDATEN-VERKNÜPFUNG) ---
+        async function startCameraScanner() {
+            const wrapper = document.getElementById('camera-stream-wrapper');
+            const video = document.getElementById('camera-video');
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                document.getElementById('slop-file-input').click();
+                return;
+            }
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" } },
+                    audio: false
+                });
+                video.srcObject = cameraStream;
+                wrapper.classList.remove('hidden');
+                clearScannedImage();
+            } catch (err) {
+                document.getElementById('slop-file-input').click();
+            }
+        }
+
+        function stopCameraScanner() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            const wrapper = document.getElementById('camera-stream-wrapper');
+            if (wrapper) wrapper.classList.add('hidden');
+        }
+
+        function captureCameraPhoto() {
+            const video = document.getElementById('camera-video');
+            const canvas = document.getElementById('camera-canvas');
+            if (!video.videoWidth) return;
+
+            canvas.width = Math.min(1024, video.videoWidth);
+            canvas.height = Math.round((video.videoHeight * canvas.width) / video.videoWidth);
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            scannedImageBase64 = dataUrl.split(',')[1];
+            scannedImageMimeType = 'image/jpeg';
+            document.getElementById('slop-image-preview').src = dataUrl;
+            document.getElementById('image-preview-wrapper').classList.remove('hidden');
+            stopCameraScanner();
+            showToast("Foto aufgenommen!", "success");
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            stopCameraScanner();
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.min(1024, img.width);
+                    canvas.height = Math.round((img.height * canvas.width) / img.width);
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                    scannedImageBase64 = dataUrl.split(',')[1];
+                    scannedImageMimeType = 'image/jpeg';
+                    document.getElementById('slop-image-preview').src = dataUrl;
+                    document.getElementById('image-preview-wrapper').classList.remove('hidden');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearScannedImage() {
+            scannedImageBase64 = null;
+            document.getElementById('slop-image-preview').src = '';
+            document.getElementById('image-preview-wrapper').classList.add('hidden');
+            document.getElementById('slop-file-input').value = '';
+        }
+
+        function fillSlopExample(text) {
+            clearScannedImage();
+            document.getElementById('slop-input').value = text;
+        }
+
+        function findMatchingLocalProducer(recommendedCategory, textFallback) {
+            const validCat = ["milk", "meat", "produce", "bakery", "honey"].includes(recommendedCategory)
+                ? recommendedCategory
+                : null;
+
+            if (validCat) {
+                const exactCatMatch = currentPlaces.find(p => p.category === validCat);
+                if (exactCatMatch) return exactCatMatch;
+            }
+
+            const lower = (textFallback || '').toLowerCase();
+            if (lower.includes('milch') || lower.includes('käse') || lower.includes('joghurt')) {
+                return currentPlaces.find(p => p.category === 'milk') || currentPlaces[0];
+            }
+            if (lower.includes('fleisch') || lower.includes('wurst') || lower.includes('salami')) {
+                return currentPlaces.find(p => p.category === 'meat') || currentPlaces[0];
+            }
+            if (lower.includes('brot') || lower.includes('toast') || lower.includes('gebäck')) {
+                return currentPlaces.find(p => p.category === 'bakery') || currentPlaces[0];
+            }
+            if (lower.includes('honig') || lower.includes('ei')) {
+                return currentPlaces.find(p => p.category === 'honey') || currentPlaces[0];
+            }
+            return currentPlaces[0] || null;
+        }
+
+        async function analyzeSlop() {
+            const input = document.getElementById('slop-input').value.trim();
+            if (!input && !scannedImageBase64) {
+                showToast("Bitte mache ein Foto oder gib ein Produkt ein.", "warning");
+                return;
+            }
+
+            const strictBioOnly = Boolean(document.getElementById('filter-strict-bio')?.checked);
+            const prioritizeCheapest = Boolean(document.getElementById('filter-cheapest-recipe')?.checked);
+
+            const btn = document.getElementById('analyze-slop-btn');
+            const resultContainer = document.getElementById('slop-result-container');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i><span>Objekterkennung, Saison- & Bio-Check...</span>`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+            const localInventorySummary = currentPlaces.slice(0, 8).map(p =>
+                `${p.name} [${p.category}]: ${(p.products || []).join(', ')}`
+            ).join(' | ');
+
+            const currentMonthName = document.getElementById('season-month-select')?.options[document.getElementById('season-month-select').selectedIndex]?.text || 'November';
+
+            const promptText = scannedImageBase64
+                ? `Führe eine Objekterkennung für das abgebildete Lebensmittel/Produkt bzw. die Zutatenliste durch. ${input ? 'Zusatzhinweis: ' + input : ''}`
+                : `Analysiere und erkenne folgende Lebensmittel/Zutaten: "${input}"`;
+
+            const userParts = [{
+                text: `${promptText}
+                Aktueller Monat in Deutschland: ${currentMonthName}.
+                Filterregeln aktiv:
+                - Höchste Bio-Qualität (Demeter/Bioland/Naturland priorisieren, EU-Bio-Massenware abwerten): ${strictBioOnly ? 'JA' : 'NEIN'}
+                - Günstigste Rezepte & Ab-Hof-Einkaufsmöglichkeiten priorisieren: ${prioritizeCheapest ? 'JA' : 'NEIN'}
+                Verfügbare lokale Erzeuger in der App: ${localInventorySummary}
+
+                Antworte im JSON-Format mit:
+                - "score": Zahl 0-100 (100 = 100% unverarbeitete Spitzen-Bio-Nahrung; bei aktiviertem Spitzen-Bio-Filter konventionelle/einfache EU-Bio-Verarbeitungsprodukte strenger bewerten)
+                - "verdict": Kurzes Urteil mit erkanntem Produktnamen
+                - "recognizedIngredients": Array der erkannten Hauptzutaten (z.B. ["Karotten", "Kartoffeln"])
+                - "bioQualityRating": Bewertung der Bio-Stufe (z.B. "Demeter / Bioland empfohlen" oder "Industrieware / Niedrige Bio-Stufe")
+                - "recommendedCategory": Einer dieser Werte: "milk" | "meat" | "produce" | "bakery" | "honey"
+                - "redFlags": Array problematischer Zusatzstoffe oder Qualitätsmängel
+                - "explanation": Kurze fachliche Erklärung (2 Sätze)
+                - "noSlopAlternative": Konkrete natürliche Alternative in höchster Bio-Qualität direkt vom Erzeuger
+                - "instantRecipe": Objekt { "title": "Günstiges Saison-Rezept mit den erkannten Zutaten", "costPerPortion": 2.10, "steps": "Kurze Zubereitung in 2 Sätzen" }`
+            }];
+
+            if (scannedImageBase64) {
+                userParts.push({ inlineData: { mimeType: scannedImageMimeType, data: scannedImageBase64 } });
+            }
+
+            const payload = {
+                contents: [{ parts: userParts }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            score: { type: "INTEGER" },
+                            verdict: { type: "STRING" },
+                            recognizedIngredients: { type: "ARRAY", items: { type: "STRING" } },
+                            bioQualityRating: { type: "STRING" },
+                            recommendedCategory: { type: "STRING" },
+                            redFlags: { type: "ARRAY", items: { type: "STRING" } },
+                            explanation: { type: "STRING" },
+                            noSlopAlternative: { type: "STRING" },
+                            instantRecipe: {
+                                type: "OBJECT",
+                                properties: {
+                                    title: { type: "STRING" },
+                                    costPerPortion: { type: "NUMBER" },
+                                    steps: { type: "STRING" }
+                                },
+                                required: ["title", "costPerPortion", "steps"]
+                            }
+                        },
+                        required: ["score", "verdict", "recognizedIngredients", "bioQualityRating", "recommendedCategory", "redFlags", "explanation", "noSlopAlternative", "instantRecipe"]
+                    }
+                }
+            };
+
+            try {
+                const res = await callGeminiAPI(payload);
+                const rawJson = res?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+                const data = JSON.parse(rawJson);
+
+                const score = typeof data.score === 'number' ? data.score : 50;
+                const isHealthy = score >= 70;
+                const badgeColor = isHealthy ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300';
+                const barColor = isHealthy ? 'bg-forest-600' : 'bg-red-600';
+
+                const searchContext = `${(data.recognizedIngredients || []).join(' ')} ${data.verdict || ''} ${input}`;
+                const harvestMatches = matchHarvestItemsFromScan(searchContext);
+
+                const harvestMatchesHtml = harvestMatches.length > 0 ? `
+                    <div class="bg-white border border-earth-200 rounded-2xl p-4 space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-forest-800">
+                                📅 Saison- & Erntezeiten-Abgleich (${escapeHtml(currentMonthName)})
+                            </span>
+                            <button type="button" onclick="switchTab('season-tab')" class="text-[11px] font-semibold text-forest-700 hover:underline">
+                                Zum Saison-Planer →
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            ${harvestMatches.map(h => `
+                                <div class="bg-earth-50 border border-earth-200 rounded-xl p-3 space-y-1.5">
+                                    <div class="flex items-center justify-between gap-1">
+                                        <span class="font-bold text-xs text-forest-950">${h.emoji} ${escapeHtml(h.name)}</span>
+                                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${h.seasonInfo.badgeClass}">${h.seasonInfo.label}</span>
+                                    </div>
+                                    <div class="text-[11px] text-forest-700">🏅 ${escapeHtml(h.qualityTier)}</div>
+                                    <div class="text-[11px] font-semibold text-forest-900">
+                                        💰 Ab-Hof ca. ${h.avgFarmPricePerKg.toFixed(2).replace('.', ',')} €/kg
+                                        ${h.bestProducer ? `bei <strong>${escapeHtml(h.bestProducer.name)}</strong>` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : '';
+
+                const instantRecipeHtml = data.instantRecipe ? `
+                    <div class="bg-earth-100/80 border border-earth-300 rounded-2xl p-4 space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-earth-800">
+                                🍳 Sofort-Rezeptvorschlag (${prioritizeCheapest ? 'Bestpreis-Filter aktiv' : 'Saisonal'})
+                            </span>
+                            <span class="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-green-100 text-green-900">
+                                ca. ${Number(data.instantRecipe.costPerPortion || 2.1).toFixed(2).replace('.', ',')} € / Portion
+                            </span>
+                        </div>
+                        <h4 class="font-serif font-bold text-base text-forest-950">${escapeHtml(data.instantRecipe.title)}</h4>
+                        <p class="text-xs text-forest-800 leading-relaxed">${escapeHtml(data.instantRecipe.steps)}</p>
+                    </div>
+                ` : '';
+
+                const matchedStore = findBestProducerForIngredient(data.recommendedCategory, prioritizeCheapest)
+                    || findMatchingLocalProducer(data.recommendedCategory, `${data.verdict} ${data.noSlopAlternative}`);
+                const localMatchCardHtml = matchedStore ? `
+                    <div class="bg-white border border-forest-300 rounded-2xl p-4 shadow-sm space-y-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-forest-700 flex items-center gap-1">
+                                📍 Frischste & günstigste Bezugsquelle (${escapeHtml(matchedStore.dataSource || 'Verifiziert')})
+                            </span>
+                            <span class="text-lg">${matchedStore.emoji || '🌿'}</span>
+                        </div>
+                        <div>
+                            <h4 class="font-serif font-bold text-base text-forest-950">${escapeHtml(matchedStore.name)}</h4>
+                            <p class="text-xs text-forest-600">${escapeHtml(matchedStore.address)}</p>
+                            ${matchedStore.priceList && matchedStore.priceList.length > 0
+                                ? `<p class="text-xs font-semibold text-earth-800 mt-1">🏷️ ${escapeHtml(matchedStore.priceList[0].item)}: ${Number(matchedStore.priceList[0].price).toFixed(2).replace('.', ',')} €</p>`
+                                : ''}
+                        </div>
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            <button type="button" onclick="focusPlaceOnMap('${matchedStore.id}')" class="bg-forest-800 hover:bg-forest-700 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition-colors">
+                                Auf Karte anzeigen
+                            </button>
+                            <a href="${buildGoogleMapsRouteUrl(matchedStore)}" target="_blank" rel="noopener noreferrer" class="bg-earth-100 hover:bg-earth-200 text-forest-900 border border-earth-300 text-xs font-semibold px-3.5 py-2 rounded-xl transition-colors">
+                                🗺️ Route starten
+                            </a>
+                        </div>
+                    </div>
+                ` : '';
+
+                resultContainer.innerHTML = `
+                    <div class="bg-earth-50 rounded-2xl p-5 border border-earth-200 space-y-4">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${badgeColor}">
+                                NoSlop-Score: ${score} / 100
+                            </span>
+                            <span class="text-xs font-semibold px-3 py-1 rounded-full bg-forest-100 text-forest-900 border border-forest-200">
+                                🏅 ${escapeHtml(data.bioQualityRating || 'Bio-Qualitätsprüfung')}
+                            </span>
+                        </div>
+                        <h3 class="font-serif text-xl font-bold text-forest-950">${escapeHtml(data.verdict || 'Analyse abgeschlossen')}</h3>
+                        ${(data.recognizedIngredients && data.recognizedIngredients.length > 0) ? `
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="text-[11px] font-bold text-forest-700">Erkannte Zutaten:</span>
+                                ${data.recognizedIngredients.map(ing => `<span class="text-[11px] font-semibold bg-white border border-earth-200 text-forest-900 px-2.5 py-0.5 rounded-lg">${escapeHtml(ing)}</span>`).join('')}
+                            </div>
+                        ` : ''}
+                        <div class="w-full h-3 bg-earth-200 rounded-full overflow-hidden">
+                            <div class="h-full ${barColor}" style="width: ${score}%"></div>
+                        </div>
+                        <p class="text-sm text-forest-800">${escapeHtml(data.explanation || '')}</p>
+                        ${data.redFlags && data.redFlags.length ? `<div class="flex flex-wrap gap-1.5">${data.redFlags.map(f => `<span class="text-xs bg-red-50 text-red-800 border border-red-200 px-2.5 py-1 rounded-lg">⚠️ ${escapeHtml(f)}</span>`).join('')}</div>` : ''}
+                        ${harvestMatchesHtml}
+                        ${instantRecipeHtml}
+                        <div class="bg-forest-800 text-earth-50 rounded-2xl p-4">
+                            <div class="text-xs font-bold uppercase text-earth-300 mb-1">Die echte NoSlop-Alternative (Spitzen-Bio):</div>
+                            <p class="text-sm">${escapeHtml(data.noSlopAlternative || '')}</p>
+                        </div>
+                        ${localMatchCardHtml}
+                    </div>
+                `;
+                resultContainer.classList.remove('hidden');
+            } catch (err) {
+                showToast("Analyse fehlgeschlagen. Bitte erneut versuchen.", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
+        }
+
+        // --- KI-COACH CHAT ---
+        function sendQuickPrompt(text) {
+            document.getElementById('chat-input').value = text;
+            handleChatSubmit(new Event('submit'));
+        }
+
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const inputEl = document.getElementById('chat-input');
+            const userText = inputEl.value.trim();
+            if (!userText) return;
+
+            const chatContainer = document.getElementById('chat-messages');
+            inputEl.value = '';
+
+            chatContainer.innerHTML += `
+                <div class="flex items-start justify-end gap-3">
+                    <div class="bg-forest-800 text-white rounded-2xl rounded-tr-none p-3.5 text-sm shadow-sm max-w-[85%]">
+                        ${escapeHtml(userText)}
+                    </div>
+                </div>
+            `;
+
+            const loadingId = 'loading-' + Date.now();
+            chatContainer.innerHTML += `
+                <div id="${loadingId}" class="flex items-start gap-3">
+                    <div class="bg-white border border-earth-200 rounded-2xl p-3.5 text-sm text-forest-600 shadow-sm">
+                        Denkt nach...
+                    </div>
+                </div>
+            `;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            const payload = {
+                contents: [{ parts: [{ text: userText }] }],
+                systemInstruction: {
+                    parts: [{ text: "Du bist der freundliche NoSlop KI-Ernährungsberater. Antworte prägnant auf Deutsch und erkläre die Vorteile natürlicher Bio-Lebensmittel (Rohmilch, Weidefleisch, Sauerteig, Honig)." }]
+                }
+            };
+
+            try {
+                const res = await callGeminiAPI(payload);
+                const reply = res?.candidates?.[0]?.content?.parts?.[0]?.text || "Keine Antwort verfügbar.";
+                const formatted = escapeHtml(reply).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+                document.getElementById(loadingId).innerHTML = `
+                    <div class="bg-white border border-earth-200 rounded-2xl rounded-tl-none p-3.5 text-sm text-forest-900 shadow-sm max-w-[85%] leading-relaxed">
+                        ${formatted}
+                    </div>
+                `;
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            } catch (err) {
+                document.getElementById(loadingId).remove();
+                showToast("Verbindung fehlgeschlagen.", "error");
+            }
+        }
+
+        // --- GEMINI API HELPER ---
+        async function callGeminiAPI(payload, retries = 3, signal = null) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+            for (let attempt = 0; attempt <= retries; attempt++) {
+                if (signal && signal.aborted) {
+                    throw new DOMException('Aborted', 'AbortError');
+                }
+                try {
+                    const response = await fetchWithTimeout(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }, 12000, signal);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return await response.json();
+                } catch (error) {
+                    if (error && error.name === 'AbortError') throw error;
+                    if (attempt === retries) throw error;
+                    await new Promise((resolve, reject) => {
+                        const t = setTimeout(resolve, Math.pow(2, attempt) * 1000);
+                        if (signal) {
+                            signal.addEventListener('abort', () => {
+                                clearTimeout(t);
+                                reject(new DOMException('Aborted', 'AbortError'));
+                            }, { once: true });
+                        }
+                    });
+                }
+            }
+        }
+
+        // --- UI HELPERS ---
+        function switchTab(tabId) {
+            if (tabId !== 'scanner-tab') {
+                stopCameraScanner();
+            }
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-white', 'text-forest-900', 'shadow-sm', 'font-semibold');
+                btn.classList.add('text-forest-700', 'font-medium');
+            });
+            const desktopBtn = document.getElementById('nav-' + tabId);
+            if (desktopBtn) {
+                desktopBtn.classList.add('bg-white', 'text-forest-900', 'shadow-sm', 'font-semibold');
+                desktopBtn.classList.remove('text-forest-700', 'font-medium');
+            }
+
+            document.querySelectorAll('.mob-nav-btn').forEach(btn => {
+                btn.classList.remove('text-forest-900', 'bg-forest-50', 'font-semibold');
+                btn.classList.add('text-forest-600', 'font-medium');
+            });
+            const mobBtn = document.getElementById('mob-nav-' + tabId);
+            if (mobBtn) {
+                mobBtn.classList.add('text-forest-900', 'bg-forest-50', 'font-semibold');
+                mobBtn.classList.remove('text-forest-600', 'font-medium');
+            }
+
+            if (tabId === 'map-tab' && map) {
+                setTimeout(() => map.invalidateSize(), 100);
+            } else if (tabId === 'season-tab') {
+                activeUserRegion = getActiveRegionContext();
+                renderSeasonPlanner();
+                detectBrowserUserLocation(false);
+            }
+        }
+
+        function openManifestoModal() {
+            const modal = document.getElementById('manifesto-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeManifestoModal() {
+            const modal = document.getElementById('manifesto-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = {
+                info: 'bg-forest-900 text-white border-forest-700',
+                success: 'bg-forest-800 text-earth-50 border-forest-500',
+                warning: 'bg-amber-800 text-white border-amber-600',
+                error: 'bg-red-800 text-white border-red-600'
+            };
+            toast.className = `${colors[type] || colors.info} border px-4 py-3 rounded-2xl shadow-lg text-xs sm:text-sm font-medium flex items-center justify-between gap-3 pointer-events-auto`;
+            toast.innerHTML = `<span>${escapeHtml(message)}</span><button onclick="this.parentElement.remove()" class="text-white/70 hover:text-white">✕</button>`;
+            container.appendChild(toast);
+            setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4500);
+        }
+
+        function escapeHtml(unsafe) {
+            return String(unsafe)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

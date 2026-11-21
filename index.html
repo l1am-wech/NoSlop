@@ -78,8 +78,8 @@
             position: relative;
             transform: translate(-50%, -100%) rotate(-45deg);
             transform-origin: 50% 50%;
-            left: 18px;
-            top: 42px;
+            left: 0;
+            top: 0;
             margin: 0;
             display: flex;
             align-items: center;
@@ -426,7 +426,6 @@
                             </button>
                         </div>
 
-                        <!-- Filterregeln: Bio-Supermarkt Spitzenqualität & Preis-Optimierung -->
                         <div class="bg-forest-50/80 border border-forest-200 rounded-2xl p-3.5 space-y-2.5">
                             <div class="text-[11px] font-bold uppercase tracking-wider text-forest-800 flex items-center gap-1.5">
                                 <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-forest-700"></i>
@@ -500,7 +499,6 @@
                     </div>
                 </div>
 
-                <!-- Saisonale Erntekarten -->
                 <div>
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="font-serif text-lg font-bold text-forest-900" id="season-harvest-heading">Aktuelle Freiland- & Lagerernte</h3>
@@ -509,7 +507,6 @@
                     <div id="season-harvest-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"></div>
                 </div>
 
-                <!-- Günstigste Saison-Rezepte & Einkaufsquellen -->
                 <div class="pt-4 border-t border-earth-200 space-y-3">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div>
@@ -1171,7 +1168,6 @@
 
         currentPlaces.forEach(p => cachePlaceDetails(p));
 
-        // --- REGIONALE ERNTEZEITEN-DATENBANK (DEUTSCHLAND) ---
         const REGIONAL_HARVEST_DB = [
             {
                 id: "harv-kartoffeln",
@@ -1494,7 +1490,7 @@
 
             const originalHtml = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Berechne Saison-Rezepte...</span>`;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Berechne KI-Saisonrezepte...</span>`;
             if (typeof lucide !== 'undefined') lucide.createIcons();
 
             const regionCtx = getActiveRegionContext();
@@ -1578,7 +1574,6 @@
             }
         }
 
-        // --- KARTE, SATELLITEN-ANSICHT & ROUTEN-FUNKTIONEN ---
         function initMap() {
             if (typeof L === 'undefined') return;
             try {
@@ -1683,9 +1678,9 @@
                 const customIcon = L.divIcon({
                     className: 'custom-div-icon',
                     html: `<div class="marker-pin ${isOsm ? 'osm-verified' : ''}"><span>${place.emoji || '🌿'}</span></div>`,
-                    iconSize: [36, 42],
-                    iconAnchor: [18, 42],
-                    popupAnchor: [0, -40]
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0],
+                    popupAnchor: [0, -48]
                 });
 
                 const pricesPreview = (place.priceList && place.priceList.length > 0)
@@ -2302,7 +2297,6 @@
             }
         }
 
-        // --- WEB-SCRAPING ROUTINE FÜR PRODUKTPREISE ---
         async function fetchHtmlViaCorsProxy(targetUrl, signal = null) {
             if (!targetUrl || !targetUrl.startsWith('http')) return null;
             const cacheKey = `html:${targetUrl.trim().toLowerCase()}`;
@@ -2419,7 +2413,6 @@
             }
         }
 
-        // --- PREIS- & EINKAUFSPLANER ---
         function selectOccasion(btnEl, occasionName) {
             selectedOccasion = occasionName;
             document.querySelectorAll('.occasion-btn').forEach(btn => {
@@ -2608,7 +2601,6 @@
             `;
         }
 
-        // --- SLOP-CHECK (STABILER SCANNER + DIREKTE LOKALDATEN-VERKNÜPFUNG) ---
         async function startCameraScanner() {
             const wrapper = document.getElementById('camera-stream-wrapper');
             const video = document.getElementById('camera-video');
@@ -2923,7 +2915,6 @@
             }
         }
 
-        // --- KI-COACH CHAT ---
         function sendQuickPrompt(text) {
             document.getElementById('chat-input').value = text;
             handleChatSubmit(new Event('submit'));
@@ -2979,7 +2970,6 @@
             }
         }
 
-        // --- GEMINI API HELPER ---
         async function callGeminiAPI(payload, retries = 3, signal = null) {
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
             for (let attempt = 0; attempt <= retries; attempt++) {
@@ -3010,7 +3000,6 @@
             }
         }
 
-        // --- UI HELPERS ---
         function switchTab(tabId) {
             if (tabId !== 'scanner-tab') {
                 stopCameraScanner();
